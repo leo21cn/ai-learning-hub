@@ -11,6 +11,7 @@ from app.middleware.admin_auth import get_admin_principal
 from app.schemas import ok
 from app.schemas.category import CategoryCreateRequest, CategoryNode, CategoryRenameRequest
 from app.services import category as svc
+from app.services.llm_sql import invalidate_vocab_cache as _invalidate_vocab_cache
 
 router = APIRouter(
     prefix="/api/admin/categories",
@@ -40,6 +41,7 @@ def create_category(
     payload: CategoryCreateRequest, db: Session = Depends(get_db)  # type: ignore[no-untyped-def]
 ):
     obj = svc.create(db, name=payload.name, parent_id=payload.parentId)
+    _invalidate_vocab_cache()
     return ok(
         data={
             "id": obj.id,
@@ -57,6 +59,7 @@ def rename_category(
     db: Session = Depends(get_db),  # type: ignore[no-untyped-def]
 ):
     obj = svc.update(db, category_id, name=payload.name)
+    _invalidate_vocab_cache()
     return ok(
         data={
             "id": obj.id,
@@ -70,6 +73,7 @@ def rename_category(
 @router.delete("/{category_id}")
 def delete_category(category_id: int, db: Session = Depends(get_db)):  # type: ignore[no-untyped-def]
     svc.delete(db, category_id)
+    _invalidate_vocab_cache()
     return ok(data=None)
 
 

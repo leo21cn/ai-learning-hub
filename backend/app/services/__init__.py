@@ -5,6 +5,7 @@ from app.services import (
     category,
     courseware,
     material,
+    search,
     tag,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "category",
     "courseware",
     "material",
+    "search",
     "tag",
 ]

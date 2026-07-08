@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-label="Learning Hub">
+  <!-- 蓝色背景 -->
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+
+  <!-- 顶部 hub 节点之间的连接线 -->
+  <g stroke="#ffffff" stroke-width="2" stroke-linecap="round">
+    <line x1="20" y1="16" x2="29" y2="19"/>
+    <line x1="44" y1="16" x2="35" y2="19"/>
+  </g>
+
+  <!-- hub 中心节点 -->
+  <circle cx="32" cy="20" r="4" fill="#ffffff"/>
+  <!-- 两颗卫星节点 -->
+  <circle cx="18" cy="14" r="3" fill="#ffffff"/>
+  <circle cx="46" cy="14" r="3" fill="#ffffff"/>
+
+  <!-- 打开的书本（学习主元素） -->
+  <path d="M14 38 C22 33,30 35,32 40 C34 35,42 33,50 38 L50 52 C42 48,34 50,32 54 C30 50,22 48,14 52 Z"
+        fill="#ffffff"/>
+</svg>

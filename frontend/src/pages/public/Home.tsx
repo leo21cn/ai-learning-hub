@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useViewStore } from "@/stores/view";
+import { Logo } from "@/components/Logo";
 
 export function HomePage() {
   const go = useViewStore((s) => s.go);
@@ -23,9 +24,9 @@ export function HomePage() {
 
   return (
     <main className="min-h-screen flex flex-col items-center pt-[20vh] px-4">
-      <h1 className="brand-title mb-3" data-testid="brand-title">
-        Learning Hub
-      </h1>
+      <div className="mb-3" data-testid="brand-title">
+        <Logo size={48} textClassName="text-slate-900" />
+      </div>
       <p className="text-slate-500 mb-8 text-sm">一句话找到你想学的课程</p>
 
       <form

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import {
   AccessTokenAPI,
   CategoryAPI,
   type AccessTokenItem,
@@ -40,8 +45,8 @@ function levelSwatch(level: number): string {
 
 /**
  * 树状分类选择器:点击触发器弹出层,递归渲染树节点,选中后回调。
- * - 任意级别可选(1/2/3 级)
- * - 选中项以路径形式回显(例如: 工程能力 / 软件工程 / 需求分析)
+ * - 任意级别可选(1/2/3 级);后端 R-01 已同步放开,前端不做拦截。
+ * - 选中项以路径形式回显(例如: 工程能力 / 软件工程 / 需求分析)。
  */
 function CategoryTreeSelect({
   value,
@@ -51,18 +56,6 @@ function CategoryTreeSelect({
   testId,
   placeholder = "请选择分类",
   clearable = false,
-  /**
-   * 仅允许选择叶子节点(L3)。
-   * - 启用后:非叶子节点(L1/L2)渲染为只读 header,鼠标悬浮无 hover 高亮,点击不会触发选择;
-   * - 配合业务规则 R-02(课件必须挂到 3 级叶子),让用户根本选不到非叶子,
-   *   避免提交时再弹"必须挂到 3 级"的错误。
-   */
-  leafOnly = false,
-  /**
-   * 当 leafOnly=true 且全树没有叶子时,展示给用户的引导文案。
-   * (例如提示先去分类管理建 3 级叶子)
-   */
-  emptyText,
 }: {
   value: number | "";
   onChange: (id: number | "") => void;
@@ -72,8 +65,6 @@ function CategoryTreeSelect({
   placeholder?: string;
   /** 是否允许清除已选项(列表头显示"全部分类"等) */
   clearable?: boolean;
-  leafOnly?: boolean;
-  emptyText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -89,12 +80,6 @@ function CategoryTreeSelect({
 
   const current = value === "" ? null : allFlat.find((n) => n.id === value);
   const display = current ? categoryPath(current, allFlat) : "";
-
-  // leafOnly 模式下,统计全树叶子总数:为 0 时显示引导文案
-  const leafCount = leafOnly
-    ? allFlat.filter((n) => n.level === 3).length
-    : -1;
-  const showEmpty = leafOnly && leafCount === 0;
 
   return (
     <div ref={wrapRef} className="relative">
@@ -139,22 +124,15 @@ function CategoryTreeSelect({
               <span className="flex-1">{placeholder}</span>
             </button>
           )}
-          {showEmpty ? (
-            <div className="px-3 py-4 text-sm text-rose-500 text-center">
-              {emptyText ?? "暂无 3 级叶子分类,请先到分类管理创建"}
-            </div>
-          ) : (
-            <CategoryTree
-              nodes={tree}
-              depth={0}
-              selectedId={value}
-              onSelect={(id) => {
-                onChange(id);
-                setOpen(false);
-              }}
-              leafOnly={leafOnly}
-            />
-          )}
+          <CategoryTree
+            nodes={tree}
+            depth={0}
+            selectedId={value}
+            onSelect={(id) => {
+              onChange(id);
+              setOpen(false);
+            }}
+          />
         </div>
       )}
     </div>
@@ -166,83 +144,68 @@ function CategoryTree({
   depth,
   selectedId,
   onSelect,
-  leafOnly = false,
 }: {
   nodes: CategoryNode[];
   depth: number;
   selectedId: number | "";
   onSelect: (id: number) => void;
-  leafOnly?: boolean;
 }) {
   return (
     <ul className="py-1">
-      {nodes.map((n) => {
-        const isLeaf = n.level === 3;
-        // leafOnly 模式:非叶子节点渲染为只读 header(不可点击)
-        if (leafOnly && !isLeaf) {
-          return (
-            <li key={n.id}>
-              <div
-                className="w-full text-left text-sm py-1.5 flex items-center gap-2 text-slate-500 cursor-default select-none"
-                style={{ paddingLeft: `${depth * 16 + 12}px`, paddingRight: "12px" }}
-                title={`${n.name} (L${n.level} · 仅供浏览,请选择下级叶子)`}
-              >
-                <span
-                  className={`inline-block w-3 h-3 rounded-sm ${levelSwatch(n.level)} shrink-0`}
-                  aria-hidden
-                />
-                <span className="flex-1 truncate font-medium">{n.name}</span>
-                <span className="text-[10px] text-slate-400 shrink-0">L{n.level}</span>
-              </div>
-              {n.children?.length ? (
-                <CategoryTree
-                  nodes={n.children}
-                  depth={depth + 1}
-                  selectedId={selectedId}
-                  onSelect={onSelect}
-                  leafOnly={leafOnly}
-                />
-              ) : null}
-            </li>
-          );
-        }
-        return (
-          <li key={n.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(n.id)}
-              data-testid={`cw-cat-tree-option-${n.id}`}
-              className={`w-full text-left text-sm py-1.5 hover:bg-primary-50 flex items-center gap-2 ${
-                n.id === selectedId ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700"
-              }`}
-              style={{ paddingLeft: `${depth * 16 + 12}px`, paddingRight: "12px" }}
-            >
-              <span
-                className={`inline-block w-3 h-3 rounded-sm ${levelSwatch(n.level)} shrink-0`}
-                aria-hidden
-              />
-              <span className="flex-1 truncate">{n.name}</span>
-              <span className="text-[10px] text-slate-400 shrink-0">L{n.level}</span>
-            </button>
-            {n.children?.length ? (
-              <CategoryTree
-                nodes={n.children}
-                depth={depth + 1}
-                selectedId={selectedId}
-                onSelect={onSelect}
-                leafOnly={leafOnly}
-              />
-            ) : null}
-          </li>
-        );
-      })}
+      {nodes.map((n) => (
+        <li key={n.id}>
+          <button
+            type="button"
+            onClick={() => onSelect(n.id)}
+            data-testid={`cw-cat-tree-option-${n.id}`}
+            className={`w-full text-left text-sm py-1.5 hover:bg-primary-50 flex items-center gap-2 ${
+              n.id === selectedId ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700"
+            }`}
+            style={{ paddingLeft: `${depth * 16 + 12}px`, paddingRight: "12px" }}
+          >
+            <span
+              className={`inline-block w-3 h-3 rounded-sm ${levelSwatch(n.level)} shrink-0`}
+              aria-hidden
+            />
+            <span className="flex-1 truncate">{n.name}</span>
+            <span className="text-[10px] text-slate-400 shrink-0">L{n.level}</span>
+          </button>
+          {n.children?.length ? (
+            <CategoryTree
+              nodes={n.children}
+              depth={depth + 1}
+              selectedId={selectedId}
+              onSelect={onSelect}
+            />
+          ) : null}
+        </li>
+      ))}
     </ul>
   );
 }
 
 export function CoursewaresPage() {
-  const [mode, setMode] = useState<Mode>("list");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams<{ id?: string }>();
+  /**
+   * 根据 URL 路径判断当前页面模式:
+   * - /admin/coursewares/new        → 新建
+   * - /admin/coursewares/:id/edit   → 编辑
+   * - /admin/coursewares            → 列表
+   *
+   * 使用 URL 而不是本地 state,是为了让浏览器后退键从新建/编辑页
+   * 直接返回列表页,而非回到列表之前的页面(例如分类管理)。
+   */
+  const mode: Mode = useMemo(() => {
+    const p = location.pathname.replace(/\/+$/, "");
+    if (p === "/admin/coursewares/new") return "create";
+    if (/^\/admin\/coursewares\/\d+\/edit$/.test(p)) return "edit";
+    return "list";
+  }, [location.pathname]);
+
   const [editing, setEditing] = useState<CoursewareItem | null>(null);
+  const [editingLoading, setEditingLoading] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [filterCat, setFilterCat] = useState<number | "">("");
   const [filterMode, setFilterMode] = useState<"" | "OPEN" | "RESTRICTED">("");
@@ -299,6 +262,28 @@ export function CoursewaresPage() {
     if (mode === "list") reload();
   }, [reload, mode]);
 
+  // 进入编辑页时,从接口加载待编辑课件(URL 仅有 id,不再有 courseware 对象)
+  useEffect(() => {
+    if (mode !== "edit") {
+      setEditing(null);
+      return;
+    }
+    const id = params.id ? Number(params.id) : NaN;
+    if (!Number.isFinite(id) || id <= 0) {
+      toast("无效的课件 id", "error");
+      navigate("/admin/coursewares", { replace: true });
+      return;
+    }
+    setEditingLoading(true);
+    CoursewareAPI.get(id)
+      .then((item) => setEditing(item))
+      .catch((e) => {
+        toast((e as Error).message || "加载课件失败", "error");
+        navigate("/admin/coursewares", { replace: true });
+      })
+      .finally(() => setEditingLoading(false));
+  }, [mode, params.id, navigate]);
+
   const allCategoriesFlat = useMemo(() => {
     const out: CategoryNode[] = [];
     const visit = (arr: CategoryNode[]) => {
@@ -312,19 +297,15 @@ export function CoursewaresPage() {
   }, [categoryTree]);
 
   const startCreate = () => {
-    setEditing(null);
-    setMode("create");
+    navigate("/admin/coursewares/new");
   };
 
   const startEdit = (cw: CoursewareItem) => {
-    setEditing(cw);
-    setMode("edit");
+    navigate(`/admin/coursewares/${cw.id}/edit`);
   };
 
   const backToList = () => {
-    setMode("list");
-    setEditing(null);
-    reload();
+    navigate("/admin/coursewares");
   };
 
   const handleDelete = async () => {
@@ -341,6 +322,15 @@ export function CoursewaresPage() {
   };
 
   if (mode !== "list") {
+    // 编辑模式下,待编辑课件从接口加载;加载未完成前不渲染表单,
+    // 避免出现表单先以空 initial 闪烁再被覆盖的抖动。
+    if (mode === "edit" && (editingLoading || !editing)) {
+      return (
+        <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm border border-slate-200 p-6 text-slate-500">
+          {editingLoading ? "正在加载课件…" : "未找到待编辑课件"}
+        </div>
+      );
+    }
     return (
       <CoursewareForm
         initial={editing}
@@ -572,6 +562,26 @@ function CoursewareForm({
   const [tokenIds, setTokenIds] = useState<number[]>(initial?.tokenIds ?? []);
   const [saving, setSaving] = useState(false);
 
+  // 选择器内的本地筛选状态(客户端过滤,避免加载量过大时难以查找)
+  const [materialKeyword, setMaterialKeyword] = useState("");
+  const [materialTypeFilter, setMaterialTypeFilter] = useState<string>("");
+  const [tokenKeyword, setTokenKeyword] = useState("");
+
+  const filteredMaterials = useMemo(() => {
+    const kw = materialKeyword.trim().toLowerCase();
+    return materials.filter((m) => {
+      if (materialTypeFilter && m.type !== materialTypeFilter) return false;
+      if (kw && !m.name.toLowerCase().includes(kw)) return false;
+      return true;
+    });
+  }, [materials, materialKeyword, materialTypeFilter]);
+
+  const filteredTokens = useMemo(() => {
+    const kw = tokenKeyword.trim().toLowerCase();
+    if (!kw) return tokens;
+    return tokens.filter((t) => t.label.toLowerCase().includes(kw));
+  }, [tokens, tokenKeyword]);
+
   const pathOf = (id: number) => {
     const node = allCategories.find((c) => c.id === id);
     return node ? categoryPath(node, allCategories) : "";
@@ -588,9 +598,8 @@ function CoursewareForm({
       toast("请选择分类", "error");
       return;
     }
-    // 业务规则 R-02:课件必须挂到 3 级叶子分类。
-    // 前端树选择器已用 leafOnly 模式,只能选到 L3 叶子;这里不再做 level 拦截
-    // (避免用户看到「必须挂到 3 级」的错误)。后端 R-02 校验仍作为最后防线。
+    // 课件可挂接到分类树的任意层级(1 级 / 2 级 / 3 级叶子)节点;
+    // 不再做 level 拦截,允许中间层级。后端校验已同步放开。
     if (accessMode === "RESTRICTED" && tokenIds.length === 0) {
       toast("受限课件必须绑定至少 1 个令牌", "error");
       return;
@@ -627,7 +636,7 @@ function CoursewareForm({
       data-testid="cw-form"
     >
       <h2 className="text-xl font-bold text-slate-800 mb-4">
-        {initial ? `编辑课件 #${initial.id}` : "新建课件"}
+        {initial ? "编辑课件" : "新建课件"}
       </h2>
 
       <div className="space-y-4">
@@ -660,8 +669,7 @@ function CoursewareForm({
             tree={categoryTree}
             allFlat={allCategories}
             testId="cw-category"
-            leafOnly
-            placeholder="请选择 3 级叶子分类"
+            placeholder="请选择分类"
           />
           {categoryTree.length === 0 && (
             <span
@@ -722,8 +730,76 @@ function CoursewareForm({
           </div>
         </label>
 
+        {accessMode === "RESTRICTED" && (
+          <div data-testid="cw-tokens-block">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-700">
+                绑定令牌 * (至少 1 个)
+              </span>
+              <span className="text-xs text-slate-500">
+                已选 {tokenIds.length} / 共 {tokens.length}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                value={tokenKeyword}
+                onChange={(e) => setTokenKeyword(e.target.value)}
+                placeholder="按令牌标签筛选"
+                data-testid="cw-token-search"
+                className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm"
+              />
+              {tokenKeyword && (
+                <button
+                  type="button"
+                  onClick={() => setTokenKeyword("")}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  清除
+                </button>
+              )}
+            </div>
+            <div className="mt-1 flex flex-col gap-1 max-h-40 overflow-y-auto border border-slate-200 rounded p-2">
+              {tokens.length === 0 && (
+                <span className="text-xs text-slate-400">
+                  暂无令牌,请先到「访问令牌」创建
+                </span>
+              )}
+              {tokens.length > 0 && filteredTokens.length === 0 && (
+                <span className="text-xs text-slate-400">
+                  没有匹配的令牌
+                </span>
+              )}
+              {filteredTokens.map((t) => (
+                <label
+                  key={t.id}
+                  className="inline-flex items-center text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={tokenIds.includes(t.id)}
+                    onChange={(e) => {
+                      if (e.target.checked)
+                        setTokenIds((s) => [...s, t.id]);
+                      else setTokenIds((s) => s.filter((x) => x !== t.id));
+                    }}
+                  />
+                  <span className="ml-1">{t.label}</span>
+                  <span className="ml-2 text-xs text-slate-400">
+                    (被 {t.coursewareCount} 个课件引用)
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
-          <span className="text-sm text-slate-700">标签</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-700">标签</span>
+            <span className="text-xs text-slate-500">
+              已选 {tagIds.length} / 共 {tags.length}
+            </span>
+          </div>
           <div className="mt-1 flex flex-wrap gap-2 max-h-32 overflow-y-auto border border-slate-200 rounded p-2">
             {tags.length === 0 && (
               <span className="text-xs text-slate-400">暂无标签</span>
@@ -745,12 +821,54 @@ function CoursewareForm({
         </div>
 
         <div>
-          <span className="text-sm text-slate-700">关联素材</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-700">关联素材</span>
+            <span className="text-xs text-slate-500">
+              已选 {materialIds.length} / 共 {materials.length}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              value={materialKeyword}
+              onChange={(e) => setMaterialKeyword(e.target.value)}
+              placeholder="按素材名称筛选"
+              data-testid="cw-material-search"
+              className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm"
+            />
+            <select
+              value={materialTypeFilter}
+              onChange={(e) => setMaterialTypeFilter(e.target.value)}
+              data-testid="cw-material-type"
+              className="border border-slate-300 rounded px-2 py-1 text-sm"
+            >
+              <option value="">全部类型</option>
+              <option value="VIDEO">视频</option>
+              <option value="PDF">PDF</option>
+              <option value="PPT">PPT</option>
+            </select>
+            {(materialKeyword || materialTypeFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMaterialKeyword("");
+                  setMaterialTypeFilter("");
+                }}
+                className="text-xs text-slate-500 hover:text-slate-700"
+              >
+                清除
+              </button>
+            )}
+          </div>
           <div className="mt-1 flex flex-col gap-1 max-h-40 overflow-y-auto border border-slate-200 rounded p-2">
             {materials.length === 0 && (
               <span className="text-xs text-slate-400">暂无素材</span>
             )}
-            {materials.map((m) => (
+            {materials.length > 0 && filteredMaterials.length === 0 && (
+              <span className="text-xs text-slate-400">
+                没有匹配的素材
+              </span>
+            )}
+            {filteredMaterials.map((m) => (
               <label key={m.id} className="inline-flex items-center text-sm">
                 <input
                   type="checkbox"
@@ -771,38 +889,6 @@ function CoursewareForm({
             ))}
           </div>
         </div>
-
-        {accessMode === "RESTRICTED" && (
-          <div>
-            <span className="text-sm text-slate-700">
-              绑定令牌 * (至少 1 个)
-            </span>
-            <div className="mt-1 flex flex-col gap-1 max-h-40 overflow-y-auto border border-slate-200 rounded p-2">
-              {tokens.length === 0 && (
-                <span className="text-xs text-slate-400">
-                  暂无令牌,请先到「访问令牌」创建
-                </span>
-              )}
-              {tokens.map((t) => (
-                <label
-                  key={t.id}
-                  className="inline-flex items-center text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={tokenIds.includes(t.id)}
-                    onChange={(e) => {
-                      if (e.target.checked)
-                        setTokenIds((s) => [...s, t.id]);
-                      else setTokenIds((s) => s.filter((x) => x !== t.id));
-                    }}
-                  />
-                  <span className="ml-1">{t.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="mt-6 flex justify-end gap-2">

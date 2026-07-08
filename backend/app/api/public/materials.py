@@ -146,6 +146,40 @@ def public_stream(
     )
 
 
+@router.get("/{material_id}/image/{page_no}")
+@limiter.limit("60/minute")
+def public_get_image(
+    request: Request,
+    material_id: int,
+    page_no: int,
+    db: Session = Depends(get_db),  # type: ignore[no-untyped-def]
+):
+    """公开 PPT 预览图片接口:返回第 N 张 PNG (1-indexed)。
+
+    - 仅 PPT 类型且 preview_images_dir 非空时可用
+    - page_no 越界返回 404
+    - 与 /stream 共享同一个 _check_acl 限制
+    """
+    obj: Material = svc.get(db, material_id)
+    _check_acl(request, material_id, db)
+    if obj.type != MaterialType.PPT.value or not obj.preview_images_dir:
+        raise BusinessError(ErrorCode.MATERIAL_NOT_FOUND, "该素材无可用预览")
+    # 不依赖 pdftoppm 输出文件名约定(page-1.png / page-01.png 都要兼容),
+    # 按文件名 page-NN.png 中的数字 glob 排序后按 1-indexed 取第 page_no 张。
+    pages = sorted(
+        Path(obj.preview_images_dir).glob("page-*.png"),
+        key=lambda p: int(p.stem.split("-")[1]),
+    )
+    if page_no < 1 or page_no > len(pages):
+        raise BusinessError(ErrorCode.MATERIAL_NOT_FOUND, "页码不存在")
+    img_path = pages[page_no - 1]
+    return FileResponse(
+        path=str(img_path),
+        media_type="image/png",
+        content_disposition_type="inline",
+    )
+
+
 @router.get("/{material_id}")
 @limiter.limit("60/minute")
 def public_get_material(
@@ -168,12 +202,22 @@ def public_get_material(
         "duration": obj.duration_or_pages,
         "streamUrl": f"/api/public/materials/{obj.id}/stream",
         "downloadUrl": f"/api/public/materials/{obj.id}/file",
-        # 提示前端预览是否就绪（PPT 是否已转 PDF）
-        "previewReady": (
-            obj.type != MaterialType.PPT.value
-            or bool(obj.preview_pdf_path and Path(obj.preview_pdf_path).exists())
-        ),
     }
+    # PPT 专属:返回 imageUrls + imageCount,用于 SlideshowViewer 直接显示图片
+    if obj.type == MaterialType.PPT.value and obj.preview_images_dir:
+        pages = sorted(
+            Path(obj.preview_images_dir).glob("page-*.png"),
+            key=lambda p: int(p.stem.split("-")[1]),
+        )
+        payload["imageCount"] = len(pages)
+        payload["imageUrls"] = [
+            f"/api/public/materials/{obj.id}/image/{i + 1}" for i in range(len(pages))
+        ]
+        payload["previewReady"] = len(pages) > 0
+    else:
+        payload["imageCount"] = 0
+        payload["imageUrls"] = []
+        payload["previewReady"] = obj.type != MaterialType.PPT.value
     return ok(data=payload)
 
 

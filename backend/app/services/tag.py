@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, ErrorCode
+from app.models.association import courseware_tag
 from app.models.tag import Tag
 
 

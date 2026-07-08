@@ -1,0 +1,38 @@
+# ===== Python / Backend =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+
+# ===== Node / Frontend =====
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+
+# ===== 环境变量(包含敏感凭据,绝不入仓)=====
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ===== 临时文件 / 测试产物 =====
+*.tmp
+*.bak
+.tmp/

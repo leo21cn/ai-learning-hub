@@ -164,18 +164,22 @@ code, body = req(
 assert_eq("restricted_no_token_blocked", code, 400)
 assert_eq("restricted_no_token_code", body.get("code"), "courseware_token_required")
 
-# ===== 8. RESTRICTED must use leaf category (R-01) =====
-code, body = req(
-    "POST",
-    "/api/admin/coursewares",
-    {
-        "title": "Bad Cat",
-        "categoryId": 2,  # root
-        "accessMode": "OPEN",
-    },
-)
-assert_eq("not_leaf_blocked", code, 400)
-assert_eq("not_leaf_code", body.get("code"), "courseware_category_not_leaf")
+# ===== 8. R-01 已放开:课件可挂接任意层级节点,不再要求 3 级叶子 =====
+# 取根节点 id (Root),创建课件到 root,应返回 201
+root_nodes = [n for n in flat if n["level"] == 1]
+if root_nodes:
+    code, body = req(
+        "POST",
+        "/api/admin/coursewares",
+        {
+            "title": "On Root",
+            "categoryId": root_nodes[0]["id"],
+            "accessMode": "OPEN",
+        },
+    )
+    assert_eq("any_level_allowed", code, 201)
+else:
+    print("(skip) no root category to assert any-level-allowed")
 
 # ===== 9. Public search =====
 code, body = req("GET", "/api/public/coursewares/search?q=Course")

@@ -3,6 +3,9 @@
  * - VIDEO → VideoPlayer
  * - PDF → PdfReader（类似 Word 阅读样式）
  * - PPT → SlideshowViewer（幻灯片样式）
+ *
+ * P-VIEWER 范围：从 API 拿到的 material 对象不再透传 `downloadUrl` 给子组件，
+ * 避免子组件误引用导致下载入口泄露。`streamUrl` / `imageUrls` 等仍按需透传。
  */
 import { useEffect, useState } from "react";
 import { PublicCoursewareAPI, type PublicMaterialItem } from "@/api";
@@ -93,19 +96,24 @@ export function Viewer() {
     return <ViewerError message={error ?? "素材不存在"} onBack={handleBack} />;
   }
 
+  // P-VIEWER 屏蔽下载：从透传给子组件的 material 中剥离 downloadUrl。
+  // 保留其他字段(streamUrl / imageUrls / sizeBytes / duration / previewReady …)。
+  const { downloadUrl: _ignored, ...viewerMaterial } = material;
+  void _ignored;
+
   switch (material.type) {
     case "VIDEO":
       return (
-        <VideoPlayer material={material} onBack={handleBack} onLogo={handleLogo} />
+        <VideoPlayer material={viewerMaterial} onBack={handleBack} onLogo={handleLogo} />
       );
     case "PDF":
       return (
-        <PdfReader material={material} onBack={handleBack} onLogo={handleLogo} />
+        <PdfReader material={viewerMaterial} onBack={handleBack} onLogo={handleLogo} />
       );
     case "PPT":
       return (
         <SlideshowViewer
-          material={material}
+          material={viewerMaterial}
           onBack={handleBack}
           onLogo={handleLogo}
         />

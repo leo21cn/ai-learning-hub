@@ -70,9 +70,47 @@
 | 选择器 | `p-result-loading` |
 | 清理 | 无 |
 
----
-
 ## 3. 搜索结果页（P-RESULT）
+
+> **v1.1 起**：AI 智能搜索返回 `data.source` 字段，徽标逻辑跟随 `source` 动态切换：
+> - `source="llm"` → 「AI 智能搜索」（qwen-plus NL2SQL 命中）
+> - `source="keyword"` → 「AI 智能搜索 · 降级中」（ILIKE 兜底）
+> 所有用例必须同时验证 `data.source` + 徽标文案两项。
+
+### F-007：自然语言长句命中（LLM 路径）
+
+| 项 | 内容 |
+| ---- | ---- |
+| 前置 | Setup 完成；后端注入有效 `DASHSCOPE_API_KEY` 且能调用阿里云百炼 |
+| 步骤 | 1. 后台创建标题含 `增量绩效-{ts}` 的开放课件（`access_mode=open`）<br>2. 打开 `{BASE}/?q=帮我找一下与增量绩效-{ts}相关的课件`<br>3. 等待网络空闲 |
+| 预期 | - 接口 `/api/public/coursewares/search` 返回 `data.source == "llm"`<br>- 徽标为「AI 智能搜索」（不含「降级中」）<br>- 命中包含刚才创建的课件，`data-courseware-id` 与新建 ID 一致 |
+| 选择器 | `p-result-card[data-courseware-id="<新建 ID>"]`, `[data-testid="p-result-badge-llm"]`（如页面渲染该标识） |
+| 清理 | 删除新建的课件 |
+| e2e | [front-search-llm.spec.ts F-007](../../frontend/e2e/front-search-llm.spec.ts) |
+
+### F-008：无 DASHSCOPE_API_KEY 时降级
+
+| 项 | 内容 |
+| ---- | ---- |
+| 前置 | e2e 环境**未**注入 `DASHSCOPE_API_KEY`；后端以空 key 启动 |
+| 步骤 | 1. 打开 `{BASE}/?q=帮我找一下与增量绩效相关的课件`（长句）<br>2. 等待网络空闲 |
+| 预期 | - 接口 `/api/public/coursewares/search` 返回 `data.source == "keyword"`<br>- 徽标显示「AI 智能搜索 · 降级中」（`source-keyword` 徽标逻辑触发）<br>- 如 DB 中存在含「增量绩效」的课件，仍能以 ILIKE 命中（0 命中时也返回 `source="keyword"`，不返回 5xx） |
+| 选择器 | `source-keyword`, `[data-testid="p-result-badge-keyword"]`（如页面渲染） |
+| 清理 | 无 |
+| e2e | [front-search-llm.spec.ts F-008](../../frontend/e2e/front-search-llm.spec.ts) |
+
+### F-009：短关键词仍按 ILIKE 命中（与 LLM 路径结果一致）
+
+| 项 | 内容 |
+| ---- | ---- |
+| 前置 | Setup 完成；DB 中存在标题含「项目管理」的课件 |
+| 步骤 | 1. 打开 `{BASE}/?q=管理`<br>2. 等待网络空闲 |
+| 预期 | - 命中包含「项目管理」相关课件<br>- `data.source` 在不同环境可能为 `"llm"`（LLM 召回）或 `"keyword"`（降级），两者徽标文案不同但命中集合一致<br>- 短关键词场景下 LLM 路径与 ILIKE 路径的召回重合度高（验收重点） |
+| 选择器 | `p-result-card[data-courseware-id]`, `p-result-count` |
+| 清理 | 无 |
+| e2e | [front-search-llm.spec.ts F-009](../../frontend/e2e/front-search-llm.spec.ts) |
+
+> **依据**：[10 §5.1.3 v1.1 LLM-to-SQL 实现说明](../spec/10-API设计规范.md)、[07 §2.4 AI 能力](../spec/07-技术架构.md)、[deploy/README §7.9](../../deploy/README.md)。
 
 ### F-010：搜索命中开放课件
 
@@ -318,14 +356,14 @@
 | 选择器 | `p-detail-video` |
 | 清理 | 暂停视频 |
 
-### F-042：详情页 PDF 链接可访问
+### F-042：[已废弃]详情页 PDF 链接可访问（v1.2 起前台不提供下载入口）
 
 | 项 | 内容 |
 | ---- | ---- |
-| 前置 | 通过搜索进入 `CW_OPEN_MULTI` 详情（关联 PDF） |
-| 步骤 | 1. 找到 `[data-testid="p-detail-pdf-link"]` 并点击 / 复制 href |
-| 预期 | - href 指向 `/api/public/materials/MAT_PDF_1/file`（或带签名的等价 URL）<br>- 直接 GET 返回 200 + `application/pdf` |
-| 选择器 | `p-detail-pdf-link` |
+| 前置 | v1.1 及之前：`CW_OPEN_MULTI` 已关联 PDF 素材（`MAT_PDF_1`） |
+| 步骤 | 1. ~~找到 `[data-testid="p-detail-pdf-link"]` 并点击 / 复制 href~~ |
+| 预期 | - v1.2 起：**[data-testid="p-detail-pdf-link"] 不存在**；P-DETAIL 不再提供任何 PDF 预览 / 下载链接<br>- 仍可点击“在线浏览”进入 P-VIEWER-PDF 以阅读 |
+| 选择器 | `p-detail-pdf-link`（断言 toHaveCount(0)） |
 | 清理 | 无 |
 
 ### F-043：详情页返回搜索
@@ -368,17 +406,17 @@
 | 选择器 | `p-detail-material` |
 | 清理 | 无 |
 
-### F-047：详情页素材按钮文案为“在线浏览”而非“下载”
+### F-047：详情页素材按钮文案为"在线浏览"且无下载入口
 
 | 项 | 内容 |
 | ---- | ---- |
 | 前置 | 进入 `CW_OPEN_BASIC` 或 `CW_OPEN_MULTI` 详情页 |
-| 步骤 | 1. 查找素材项中 `[data-testid="p-detail-material-browse-btn"]`<br>2. 同时查找该素材块是否仍提供 `[data-testid="p-detail-material-download-link"]` |
-| 预期 | - `p-detail-material-browse-btn` 文案为 `在线浏览`<br>- 同一素材块仍存在 `p-detail-material-download-link`（下载到本地兜底）<br>- 原有 `下载` / `下载到本地` 作为单独主按钮的场景不再出现（仅作为辅助文字链接） |
-| 选择器 | `p-detail-material-browse-btn`, `p-detail-material-download-link` |
+| 步骤 | 1. 查找素材项中 `[data-testid="p-detail-material-browse-btn"]`<br>2. 同时确认该素材块**不再提供** `[data-testid="p-detail-material-download-link"]` |
+| 预期 | - `p-detail-material-browse-btn` 文案为 `在线浏览`<br>- v1.2 起：同一素材块**不存在** `p-detail-material-download-link`；页面中**不出现** `下载到本地` 链接 / 文字<br>- 唯一可访问素材文件的方式是点击"在线浏览"进入 P-VIEWER |
+| 选择器 | `p-detail-material-browse-btn`, `p-detail-material-download-link`（断言 toHaveCount(0)） |
 | 清理 | 无 |
 
-> 依据：[02 F01.08](../spec/02-功能需求.md) / [08 §8a AC-019~021](../spec/08-验收标准.md) / [03 §5.4](../spec/03-前台门户规格.md) / [09 §6.3](../spec/09-UI规格.md)。
+> 依据：[02 F01.08](../spec/02-功能需求.md) / [08 §8a AC-019~021](../spec/08-验收标准.md) / [03 §5.4](../spec/03-前台门户规格.md) / [09 §6.3](../spec/09-UI规格.md)。v1.2 起 P-DETAIL 同步去除了原“下载到本地”文字链接。
 
 ---
 
@@ -390,8 +428,8 @@
 | ---- | ---- |
 | 前置 | `CW_OPEN_BASIC` 已关联 MP4 素材（`MAT_VIDEO_1`），`preview_pdf_path = NULL` |
 | 步骤 | 1. 进入详情 → 点击该素材项的 `[data-testid="p-detail-material-browse-btn"]`<br>2. URL 变为 `/?view=viewer&id=<materialId>&cw=<coursewareId>`<br>3. 等待 `[data-testid="p-viewer-video"]` 可见且 `readyState > 0` |
-| 预期 | - `[data-testid="p-viewer-video"]` 可见，内嵌 `<video controls>` 元素 `readyState > 0`<br>- `[data-testid="p-viewer-video-info-name"]` 为原文件名<br>- `[data-testid="p-viewer-video-info-duration"]` 为 `mm:ss` 格式（如 `01:23`）<br>- `[data-testid="p-viewer-video-info-size"]` 为人类可读大小（如 `12.34 MB`）<br>- `[data-testid="p-viewer-download-link"]` 可见 |
-| 选择器 | `p-viewer-video`, `p-viewer-video-info`, `p-viewer-video-info-name`, `p-viewer-video-info-duration`, `p-viewer-video-info-size`, `p-viewer-download-link` |
+| 预期 | - `[data-testid="p-viewer-video"]` 可见，内嵌 `<video controls>` 元素 `readyState > 0`<br>- `[data-testid="p-viewer-video-info-name"]` 为原文件名<br>- `[data-testid="p-viewer-video-info-duration"]` 为 `mm:ss` 格式（如 `01:23`）<br>- `[data-testid="p-viewer-video-info-size"]` 为人类可读大小（如 `12.34 MB`）<br>- **页面不存在** `[data-testid="p-viewer-download-link"]`（v1.2 起 P-VIEWER 隐藏所有下载入口）<br>- 顶栏 / 信息面板中**不出现**文字 `下载到本地` |
+| 选择器 | `p-viewer-video`, `p-viewer-video-info`, `p-viewer-video-info-name`, `p-viewer-video-info-duration`, `p-viewer-video-info-size` |
 | 清理 | 无 |
 
 ### F-049：P-VIEWER-PDF PDF Word 式阅读
@@ -426,14 +464,14 @@
 | 选择器 | `p-viewer-back-btn`, `p-detail-title` |
 | 清理 | 无 |
 
-### F-052：P-VIEWER 下载到本地兜底链接可用
+### F-052：P-VIEWER 不提供任何下载入口（v1.2）
 
 | 项 | 内容 |
 | ---- | ---- |
-| 前置 | 任一 P-VIEWER 样式 |
-| 步骤 | 1. 点击顶栏 `[data-testid="p-viewer-download-link"]`<br>2. 观察浏览器下载行为或抓取该链接的 HTTP 响应头 |
-| 预期 | - VIDEO / PDF：浏览器内嵌预览或弹出下载（保留原名）<br>- PPT：浏览器触发下载（`Content-Disposition: attachment`）<br>- HTTP 200，文件名保留原名 |
-| 选择器 | `p-viewer-download-link` |
+| 前置 | 任一 P-VIEWER 样式（VIDEO / PDF / PPT）；以 VIDEO 为例验证三种样式均无下载 |
+| 步骤 | 1. 进入 VIDEO / PDF / PPT 任一样式的 P-VIEWER<br>2. 抓取页面内全部 `<a>` / `<button>` 元素，匹配 href 或文本包含 `下载` / `下载到本地` / `/api/public/materials/` / `download` 的命中集合<br>3. 同时断言 `[data-testid="p-viewer-download-link"]` **不存在** |
+| 预期 | - 三种 P-VIEWER 样式均**不存在** `[data-testid="p-viewer-download-link"]`<br>- 顶栏 / 工具栏 / 信息面板 / 错误态 / 空态中**不出现** `下载到本地` 文本链接<br>- 唯一例外是浏览器原生 `<video controls>` 自带的下载按钮（任务范围不覆盖原生 UI）<br>- v1.2 起：P-DETAIL 的 `[data-testid="p-detail-material-download-link"]` 同样**不存在**；前台整体**不提供**任何素材下载入口 |
+| 选择器 | `p-viewer-download-link`（断言 toHaveCount(0)）、`page.locator('a:has-text("下载到本地")')`（仅 P-VIEWER 范围） |
 | 清理 | 无 |
 
 ### F-053：P-VIEWER-PPT 全屏切换
@@ -472,8 +510,8 @@
 | ---- | ---- |
 | 前置 | `MAT_PPTX_PENDING` 上传后未等待 LibreOffice 转换完成（`preview_pdf_path = NULL`） |
 | 步骤 | 1. 进入该素材的 P-VIEWER |
-| 预期 | - 控制台 / `[data-testid="p-viewer-ppt-preview-pending"]` 提示 `预览生成中，请下载到本地查看`<br>- `[data-testid="p-viewer-download-link"]` 仍可用，下载为原 PPT/PPTX 文件 |
-| 选择器 | `p-viewer-ppt-preview-pending`, `p-viewer-download-link` |
+| 预期 | - `[data-testid="p-viewer-ppt-preview-pending"]` 提示 `预览尚未生成，请稍后重试`（v1.2 起不再带“下载到本地查看”）<br>- 页面**不存在** `[data-testid="p-viewer-download-link"]`；顶栏 / 空态中**不出现** `下载到本地` 链接<br>- v1.2 起：P-DETAIL 也不提供 `p-detail-material-download-link` 下载入口；如需离线查看请等待预览生成后再访问 |
+| 选择器 | `p-viewer-ppt-preview-pending`, `p-viewer-download-link`（断言 toHaveCount(0)） |
 | 清理 | 无 |
 
 ---
@@ -596,7 +634,7 @@
 
 | 用例 | 关键数据依赖 |
 | ---- | ------------ |
-| F-001 ~ F-009 | 无 |
+| F-001 ~ F-005 | 无 |
 | F-010 | `CW_OPEN_BASIC`, `TAG_PM`, `CAT_PM_GENERAL_INTRO`, `MAT_VIDEO_1` |
 | F-011 | `CW_RESTRICTED`, `TAG_BE`, `CAT_SE_BE_JAVA`, `MAT_PPT_1` |
 | F-012 | `CW_OPEN_BASIC` + `CW_OPEN_MULTI` |

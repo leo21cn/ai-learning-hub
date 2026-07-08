@@ -53,8 +53,10 @@ class Material(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     duration_or_pages: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    # PPT 上传后由 LibreOffice 转换得到的 PDF 路径;为 NULL 表示未转换或失败未重试
-    preview_pdf_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # PPT 上传后由 LibreOffice 转 PDF、再由 pdftoppm 拆成多张 PNG
+    # 存放于该目录下: {preview_images_dir}/page-1.png, page-2.png, ...
+    # 为 NULL 表示未转换或失败未重试; 前端 P-VIEWER 走降级「下载到本地」
+    preview_images_dir: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     uploaded_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )

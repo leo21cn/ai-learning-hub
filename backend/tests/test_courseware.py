@@ -33,16 +33,25 @@ def test_courseware_restricted_requires_token(client, courseware_payload):
     assert r.json()["code"] == "courseware_token_required"
 
 
-def test_courseware_category_must_be_leaf(client, courseware_payload):
-    # 2 级节点 → 应失败(courseware_category_not_leaf)
+def test_courseware_category_any_level_allowed(client, courseware_payload):
+    """R-01 已放开:课件可挂接到分类树的任意层级节点(1 级 / 2 级 / 3 级叶子)。"""
+    # 2 级节点 → 原先会报 courseware_category_not_leaf,现在应正常创建
     a = client.post("/api/admin/categories", json={"name": "Top"}).json()["data"]
     b = client.post(
         "/api/admin/categories", json={"name": "L2", "parentId": a["id"]}
     ).json()["data"]
-    payload = courseware_payload(category_id=b["id"], access_mode="OPEN")
+    payload = courseware_payload(category_id=b["id"], access_mode="OPEN", title="on-l2")
     r = client.post("/api/admin/coursewares", json=payload)
-    assert r.status_code == 400
-    assert r.json()["code"] == "courseware_category_not_leaf"
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["categoryId"] == b["id"]
+
+    # 1 级根节点也应允许
+    payload_root = courseware_payload(
+        category_id=a["id"], access_mode="OPEN", title="on-root"
+    )
+    r2 = client.post("/api/admin/coursewares", json=payload_root)
+    assert r2.status_code == 201, r2.text
+    assert r2.json()["data"]["categoryId"] == a["id"]
 
 
 def test_courseware_search_endpoint(client, courseware_payload):

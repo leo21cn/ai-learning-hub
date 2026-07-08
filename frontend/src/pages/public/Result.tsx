@@ -15,7 +15,9 @@ export function ResultPage() {
   const q = useViewStore((s) => s.q);
   const go = useViewStore((s) => s.go);
   const [items, setItems] = useState<CoursewareItem[]>([]);
-  const [source, setSource] = useState<"llm" | "keyword">("keyword");
+  // 初始为 null:请求未完成时,源未确定,避免先“降级中”闪一下。
+  // 拿到响应后再 setSource(res.source ?? "keyword")。
+  const [source, setSource] = useState<"llm" | "keyword" | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -53,14 +55,15 @@ export function ResultPage() {
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           共 {items.length} 条结果
-          {source === "llm" ? (
+          {source === "llm" && (
             <span
               className="ml-2 px-2 py-0.5 text-xs rounded bg-primary-100 text-primary-700"
               data-testid="source-llm"
             >
               AI 智能搜索
             </span>
-          ) : (
+          )}
+          {source === "keyword" && (
             <span
               className="ml-2 px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700"
               title="LLM 不可用,已自动降级到关键词搜索"

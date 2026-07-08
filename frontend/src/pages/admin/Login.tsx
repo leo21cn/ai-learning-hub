@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAdminStore } from "@/stores/admin";
+import { Logo } from "@/components/Logo";
 
 /**
  * A-LOGIN:管理员登录页。
@@ -33,9 +34,9 @@ export function LoginPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="brand-title text-center mb-1" data-testid="login-title">
-          Learning Hub
-        </h1>
+        <div className="flex justify-center mb-1" data-testid="login-title">
+          <Logo size={40} textClassName="text-slate-900" />
+        </div>
         <p className="text-center text-slate-500 text-sm mb-6">管理员登录</p>
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">

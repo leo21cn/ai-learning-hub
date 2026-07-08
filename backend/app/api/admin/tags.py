@@ -9,6 +9,7 @@ from app.middleware.admin_auth import get_admin_principal
 from app.schemas import ok
 from app.schemas.tag import TagNameRequest
 from app.services import tag as svc
+from app.services.llm_sql import invalidate_vocab_cache as _invalidate_vocab_cache
 
 router = APIRouter(
     prefix="/api/admin/tags",
@@ -31,6 +32,7 @@ def list_tags(
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_tag(payload: TagNameRequest, db: Session = Depends(get_db)):  # type: ignore[no-untyped-def]
     obj = svc.create(db, name=payload.name)
+    _invalidate_vocab_cache()
     return ok(
         data={
             "id": obj.id,
@@ -47,6 +49,7 @@ def rename_tag(
     db: Session = Depends(get_db),  # type: ignore[no-untyped-def]
 ):
     obj = svc.update(db, tag_id, name=payload.name)
+    _invalidate_vocab_cache()
     return ok(
         data={
             "id": obj.id,
@@ -59,6 +62,7 @@ def rename_tag(
 @router.delete("/{tag_id}")
 def delete_tag(tag_id: int, db: Session = Depends(get_db)):  # type: ignore[no-untyped-def]
     svc.delete(db, tag_id)
+    _invalidate_vocab_cache()
     return ok(data=None)
 
 

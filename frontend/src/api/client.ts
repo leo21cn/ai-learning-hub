@@ -4,7 +4,11 @@ import axios, { AxiosError } from "axios";
  * 统一 axios 客户端:
  * - baseURL 指向 /api(同源代理或反代)
  * - 自动附带 X-Request-Id
- * - 业务码非 ok 时抛错,供 React Query / Toast 统一兜底
+ * - 业务码非 ok 时抛错，供 React Query / Toast 统一兜底
+ *
+ * 注意:受限课件鉴权所需的 X-Token-Hash 头由调用方在
+ * PublicCoursewareAPI.get / getMaterial 中显式传入，避免与 stream/file
+ * 等 cookie-only 接口耦合。
  */
 export const apiClient = axios.create({
   baseURL: "/api",

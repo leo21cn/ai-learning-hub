@@ -256,4 +256,88 @@ curl -I http://localhost:8000/api/public/materials/<video_id>/stream
 | `pdf.worker.min.mjs` 404 | 浏览器控制台报 `Setting up fake worker`，P-VIEWER-PDF / P-VIEWER-PPT 渲染失败；需重新构建 frontend 镜像 |
 | 转换超时（>60s） | logger 记 `ppt_to_pdf_timeout`，上传 200 OK，前端走下载兜底 |
 
+### 7.9 AI 搜索依赖（v1.1 LLM-to-SQL · qwen-plus）
+
+> 背景：v1.1 起，AI 智能搜索改为「LLM 直接生成检索 SQL + 关键词 ILIKE 兜底」，依赖阿里云百炼 `qwen-plus`（走 `dashscope` SDK）。本节说明本地 docker-compose 环境中的环境变量、验证步骤与降级路径。
+
+#### 7.9.1 环境变量
+
+[backend/.env.example](../backend/.env.example) 中已默认注释：
+
+```env
+# LLM（阿里云百炼 qwen-plus 用于 NL2SQL；留空 → LLM 禁用，前台搜索全部降级到关键词 ILIKE）
+DASHSCOPE_API_KEY=
+LLM_SEARCH_MODEL=qwen-plus
+LLM_SQL_TIMEOUT_SECONDS=8
+LLM_SQL_MAX_ROWS=20
+```
+
+实际部署时复制为 [backend/.env](../backend/.env)（不入仓）后填入阿里云百炼控制台 [API Keys](https://dashscope.console.aliyun.com/apiKey) 颁发的 key。生产环境推荐走 Secrets Manager / docker secrets 注入。
+
+#### 7.9.2 验证步骤
+
+```bash
+# 1. 检查变量被后端读取
+docker compose exec backend python -c \
+  "from app.core.config import get_settings; s=get_settings(); print('llm_enabled:', s.llm_enabled, 'model:', s.llm_search_model)"
+# 预期（填了 key）：llm_enabled: True model: qwen-plus
+# 预期（未填 key）：llm_enabled: False model: qwen-plus
+
+# 2. 长句调用走 LLM 路径
+curl -s 'http://localhost:8000/api/public/coursewares/search?q=%E5%B8%AE%E6%88%91%E6%89%BE%E4%B8%80%E4%B8%8B%E4%B8%8E%E5%A2%9E%E9%87%8F%E7%BB%A9%E6%95%88%E7%9B%B8%E5%85%B3%E7%9A%84%E8%AF%BE%E4%BB%B6' | jq
+# 预期：data.source == "llm"；徽标显示「AI 智能搜索」
+
+# 3. 无 key 时直接降级
+DASHSCOPE_API_KEY= docker compose up -d --build backend
+curl -s 'http://localhost:8000/api/public/coursewares/search?q=项目' | jq
+# 预期：data.source == "keyword"；徽标显示「AI 智能搜索 · 降级中」
+
+# 4. 端到端验证脚本
+docker compose exec backend python -m pytest tests/test_llm_sql.py tests/test_search_llm.py -v
+# 预期：所有用例通过；纯函数 7 道闸覆盖见 tests/test_llm_sql.py
+```
+
+#### 7.9.3 降级路径表
+
+| 场景 | 触发条件 | 行为 | 返回 `source` | 日志关键字 |
+| ---- | -------- | ---- | ------------- | ---------- |
+| LLM 禁用 | `DASHSCOPE_API_KEY` 未配置 / 为空串 | 跳过 LLM 调用，直接走 ILIKE | `keyword` | `LLM disabled` |
+| 网络 / 超时 | `dashscope.Generation.call` 抛异常或 > 8s | fallback ILIKE | `keyword` | `LLM SQL search failed` / `LLM SQL search timeout` |
+| LLM 返回空 | `generate_sql` 返回 `None` 或空字符串 | fallback ILIKE | `keyword` | `LLM returned empty SQL` |
+| 白名单校验失败 | `_sql_safety.validate_sql` 任一闸失败 | fallback ILIKE | `keyword` | `SQL safety check failed` |
+| 执行异常 | `SET TRANSACTION READ ONLY` 或 SELECT 报错 | fallback ILIKE | `keyword` | `LLM SQL execution failed` |
+| 全部成功 | qwen-plus 生成 SQL 通过 7 道闸 | 返回 LLM 命中，按 `updated_at DESC` 取前 `LLM_SQL_MAX_ROWS` 条 | `llm` | `LLM SQL search ok` |
+
+#### 7.9.4 安全护栏（仅运维参考）
+
+LLM 直写 SQL 经 [backend/app/services/_sql_safety.py](../backend/app/services/_sql_safety.py) `validate_sql` 校验：
+
+1. 剥离 markdown 包裹（` ```sql … ``` ` / ` ``` … ``` `）
+2. 拒绝多语句（去除末尾 `;` 仍允许多个 → 拒）
+3. 拒绝注释（`--` / `/* … */`）
+4. 首词必须是 `SELECT`（不区分大小写）
+5. 黑名单关键字整词匹配：`DROP / DELETE / UPDATE / INSERT / ALTER / CREATE / TRUNCATE / GRANT / REVOKE / EXEC / COPY / VACUUM / LOCK / COMMENT / SET / RESET / CALL / DO / UNION / INTERSECT / EXCEPT`
+6. `FROM / JOIN` 提取的表名必须在白名单 `{courseware, category, tag, material, courseware_tag, courseware_material, courseware_access_token}`；拒绝 `pg_*` / `information_schema`
+7. 强制 `LIMIT`：显式 `LIMIT` > 50 时截断到 50；缺 `LIMIT` 时追加 `LIMIT {LLM_SQL_MAX_ROWS}`
+
+通过校验后仍以 `db.execute(text("SET TRANSACTION READ ONLY"))` + 立即 rollback 执行，作为最后一道保险（即使 LLM 编造了合法的 DML，PostgreSQL 会直接拒绝该事务）。
+
+#### 7.9.5 从 v1.0（embedding）回滚到 v1.1（LLM-to-SQL）的容器重建
+
+> 如本机是从更早 embedding 方案（pgvector + dashscope embedding）迁移过来的，执行以下步骤避免旧镜像 / 数据卷残留：
+
+```bash
+docker compose down -v
+docker compose up -d --build
+docker compose exec backend alembic upgrade head
+```
+
+预期：postgres 镜像回到 `postgres:16-alpine`（无 pgvector 扩展），`courseware_embedding` 表已不存在，搜索接口通过 `data.source` 字段判断走 LLM 还是 ILIKE。
+
+#### 7.9.6 已知坑 / 修复
+
+- **dashscope SDK 在容器内偶发 `ReadTimeoutError`**：默认 `LLM_SQL_TIMEOUT_SECONDS=8` 包含网络 RTT。如频繁超时，可临时调高到 12，并确认后端 → 阿里云 VPC 出口可达。
+- **e2e 环境无 key**：Playwright 套件中 `front-search-llm.spec.ts` 默认走降级路径断言（徽标 `source-keyword`）；如需断言 LLM 路径，需在 e2e 容器注入 `DASHSCOPE_API_KEY`。
+- **白名单拒绝合法 SQL**：若发现 qwen-plus 频繁返回 `courseware JOIN category` 类合法但被拒的写法，请检查是否漏配白名单表 / 是否出现 schema 限定符（如 `public.courseware`）；详见 [backend/app/services/_sql_safety.py](../backend/app/services/_sql_safety.py) 中的 `ALLOWED_TABLES`。
+
 ---

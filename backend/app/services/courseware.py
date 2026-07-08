@@ -1,7 +1,7 @@
 """课件(Courseware)业务服务。
 
 业务规则:
-- R-01 课件必须挂载到 3 级叶子分类节点
+- R-01 课件可挂载到分类树任意层级节点(1 级 / 2 级 / 3 级叶子)
 - R-02 标题非空,≤100 字符
 - R-03 accessMode=RESTRICTED 时 accessTokens 至少 1 个
 - R-12 accessMode 从 RESTRICTED 降级为 OPEN 时自动清空 token 绑定
@@ -81,11 +81,8 @@ def _resolve_category(db: Session, category_id: int) -> Category:
     cat = db.get(Category, category_id)
     if not cat:
         raise BusinessError(ErrorCode.COURSEWARE_CATEGORY_REQUIRED, "分类不存在")
-    # R-01:课件必须挂载到叶子节点(level=3),不允许挂在 1/2 级
-    if cat.level != 3:
-        raise BusinessError(
-            ErrorCode.COURSEWARE_CATEGORY_NOT_LEAF, "课件必须挂载到 3 级分类"
-        )
+    # R-01:课件可挂接到分类树的任意层级节点(1 级 / 2 级 / 3 级叶子),
+    # 不再限制必须为 3 级叶子。
     return cat
 
 

@@ -29,8 +29,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # env_file 指向本地 backend/.env（含真实 DASHSCOPE_API_KEY），不入仓。
+    # 本地首次使用时: `cp backend/.env.example backend/.env` 后填入 key。
+    # 模板 backend/.env.example 与本地 backend/.env 并存：后者含凭据，git 忽略。
     env_file:
-      - ../backend/.env.example
+      - ../backend/.env
     environment:
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432

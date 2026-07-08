@@ -4,11 +4,13 @@
  * 通过 ?id=<coursewareId> 调用 /api/public/coursewares/{id};RESTRICTED
  * 课件需要客户端已记忆 tokenHash,并以 X-Token-Hash 头传入;否则由前
  * 端拦截跳回 P-LOCKED。
+ *
+ * v1.2 起：P-DETAIL 不再提供任何"下载到本地"入口，仅保留"在线浏览"按钮。
+ * 后端 `/api/public/materials/{id}/file` 端点仍存在，仅供管理后台 / 调试。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useViewStore } from "@/stores/view";
 import { PublicCoursewareAPI, type CoursewareItem } from "@/api";
-import { toast } from "@/stores/toast";
 
 export function DetailPage() {
   const id = useViewStore((s) => s.id);
@@ -27,6 +29,8 @@ export function DetailPage() {
     setErr(null);
     // 走封装的 API;RESTRICTED 课件如果尚未记忆 tokenHash,服务端返回 403,
     // 这里捕到后切回 P-LOCKED 让用户输入。
+    // 注意:apiClient 请求拦截器会自动从 useTokenStore 读 tokenHash 并加
+    // X-Token-Hash 头,即使 cookie 还未写入也能解锁。
     PublicCoursewareAPI.get(id as number)
       .then((cw) => {
         if (cancel) return;
@@ -50,12 +54,6 @@ export function DetailPage() {
   const handleBrowse = (materialId: number) => {
     // 跳转到 P-VIEWER，根据素材类型渲染三种样式
     go({ view: "viewer", id: materialId, coursewareId: id });
-  };
-
-  const handleDownload = (materialId: number) => {
-    // 下载到本地兜底链接
-    window.open(`/api/public/materials/${materialId}/file`, "_blank");
-    toast("已开始下载", "success");
   };
 
   const breadcrumb = useMemo(() => {
@@ -156,6 +154,7 @@ export function DetailPage() {
                       ({m.type}, {Math.round(m.sizeBytes / 1024)} KB)
                     </span>
                   </div>
+                  {/* v1.2 起：P-DETAIL 不再提供"下载到本地"入口，仅保留"在线浏览" */}
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       data-testid="p-detail-material-browse-btn"
@@ -164,15 +163,6 @@ export function DetailPage() {
                     >
                       在线浏览
                     </button>
-                    <a
-                      data-testid="p-detail-material-download-link"
-                      href={`/api/public/materials/${m.id}/file`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-slate-500 hover:underline whitespace-nowrap"
-                    >
-                      下载到本地
-                    </a>
                   </div>
                 </li>
               ))}

@@ -36,10 +36,11 @@ async def search_coursewares(
     size: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),  # type: ignore[no-untyped-def]
 ):
-    """统一搜索:LLM 语义排序 + 关键词回退,5 秒超时。
+    """统一搜索:embedding 召回 + 关键词回退,5 秒超时。
 
     返回 envelope `data`:`{items, source, total, page, size}`。
-    source=`llm` 表示本次结果由大模型重排;`keyword` 表示纯 ILIKE。
+    source=`embedding` 表示本次结果由 dashscope text-embedding-v4 语义召回;
+    source=`keyword` 表示 embedding 未启用或失败,已降级为 ILIKE(前端徽标显示"降级中")。
     """
     result = await search_service(db, keyword=q or "", size=size)
     return ok(

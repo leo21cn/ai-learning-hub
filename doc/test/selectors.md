@@ -70,6 +70,9 @@
 
 ### 3.4 课件详情页（P-DETAIL）
 
+> **v1.2 起**：P-DETAIL 不再提供"下载到本地"入口，`p-detail-material-download-link`
+> 与 `p-detail-pdf-link` 均被移除，仅保留 `p-detail-material-browse-btn`。
+
 | 元素 | `data-testid` | `aria-label` |
 | ---- | ------------- | ------------ |
 | H1 标题 | `p-detail-title` | - |
@@ -82,10 +85,13 @@
 | 返回搜索 | `p-detail-back-btn` | `返回搜索` |
 | Logo | `p-detail-logo` | - |
 | 视频播放器 | `p-detail-video` | - |
-| PDF 预览 / 下载链接 | `p-detail-pdf-link` | - |
-| 素材项“下载到本地” | `p-detail-material-download-link` | - |
 
 ### 3.5 素材在线浏览页（P-VIEWER）
+
+> **v1.2 起**：P-VIEWER 与 P-DETAIL 三种样式均不提供任何“下载到本地”入口，
+> 不暴露 `/api/public/materials/{id}/file`。`p-viewer-download-link`、
+> `p-detail-material-download-link` 与 `p-detail-pdf-link` 均被移除。
+> 错误 / 加载态文案保留但不提供下载链接。
 
 #### 3.5.0 公共顶栏（三种样式共享）
 
@@ -94,7 +100,6 @@
 | 返回按钮 | `p-viewer-back-btn` | `返回` |
 | 文件名 | `p-viewer-title` | - |
 | 类型徽标 | `p-viewer-type-badge` | - |
-| 下载到本地链接 | `p-viewer-download-link` | `下载到本地` |
 | Logo | `p-viewer-logo` | `返回首页` |
 
 #### 3.5.1 视频样式（P-VIEWER-VIDEO）
@@ -127,13 +132,14 @@
 | 元素 | `data-testid` | `aria-label` |
 | ---- | ------------- | ------------ |
 | 根容器 | `p-viewer-ppt` | - |
-| 画布 | `p-viewer-ppt-canvas` | - |
+| 图片 | `p-viewer-ppt-image` | - |
 | 上一张按钮 | `p-viewer-ppt-prev` | `上一张` |
 | 下一张按钮 | `p-viewer-ppt-next` | `下一张` |
 | 页码指示器 | `p-viewer-ppt-indicator` | `第 N / M 张` |
 | 全屏按钮 | `p-viewer-ppt-fullscreen` | `全屏` |
 | 控制条容器 | `p-viewer-ppt-controls` | - |
 | 加载文案 | `p-viewer-ppt-loading` | - |
+| 错误文案 | `p-viewer-ppt-error` | - |
 | 预览未生成提示 | `p-viewer-ppt-preview-pending` | - |
 
 ---

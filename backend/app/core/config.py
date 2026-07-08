@@ -41,18 +41,20 @@ class Settings(BaseSettings):
     # ===== 存储 =====
     storage_path: str = Field(default="/app/storage/documents")
 
-    # ===== PPT 转 PDF =====
+    # ===== PPT 转图片 =====
     libreoffice_path: str = Field(default="/usr/bin/libreoffice")
+    poppler_path: str = Field(default="/usr/bin/pdftoppm")
     ppt_convert_timeout: int = Field(default=60)
 
     # ===== 限流 / Redis =====
     storage_redis_url: str = Field(default="")
 
-    # ===== LLM =====
-    openai_api_key: str = Field(default="")
-    openai_api_base: str = Field(default="https://api.openai.com/v1")
-    openai_model: str = Field(default="gpt-4o-mini")
-    llm_timeout_seconds: float = Field(default=5.0)
+    # ===== LLM(阿里云百炼 qwen-plus 用于 NL2SQL)=====
+    # 留空 → LLM 服务禁用,前台搜索自动降级到关键词 ILIKE。
+    dashscope_api_key: str = Field(default="")
+    llm_search_model: str = Field(default="qwen-plus")
+    llm_sql_timeout_seconds: float = Field(default=8.0)
+    llm_sql_max_rows: int = Field(default=20)
 
     # ===== 日志 =====
     log_level: str = Field(default="INFO")
@@ -63,7 +65,7 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
-        return bool(self.openai_api_key and self.openai_api_key.strip())
+        return bool(self.dashscope_api_key and self.dashscope_api_key.strip())
 
 
 @lru_cache(maxsize=1)

@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAdminStore } from "@/stores/admin";
 import { ToastViewport } from "@/components/Toast";
+import { Logo } from "@/components/Logo";
 
 const NAV = [
   { to: "/admin/coursewares", label: "课件管理" },
@@ -22,7 +23,8 @@ export function AdminLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-6">
-        <h1 className="text-lg font-bold text-slate-800">Learning Hub · 管理后台</h1>
+        <Logo size={28} textClassName="text-slate-800" />
+        <span className="text-sm text-slate-500">· 管理后台</span>
         <nav className="flex gap-1 text-sm" data-testid="admin-nav">
           {NAV.map((n) => (
             <NavLink

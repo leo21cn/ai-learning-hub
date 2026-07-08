@@ -917,7 +917,9 @@ curl -X POST http://localhost/api/admin/materials \
 
 #### 5.1.1 `POST /api/public/coursewares/search`
 
-接收自然语言查询；服务端调用 LLM 做语义匹配 + 关键词回退，返回命中的课件卡片列表。
+v1.1 起,接收自然语言查询;服务端调用阿里云百炼 qwen-plus 生成检索 SQL,经白名单校验后在 PostgreSQL 只读事务中执行,失败 / 超时自动降级为关键词 ILIKE 匹配,返回命中的课件卡片列表。
+
+> **架构概览(v1.1 LLM-to-SQL)**:用户输入 → LLM 直写 SELECT → `_sql_safety.validate_sql` 7 道闸白名单 → DB 只读事务执行 → 结果按 `updated_at DESC` 取前 `topK` 条 → 命中即返回 `source="llm"`;任一环节失败/超时/未配置 key,回退到 `_keyword_hits()` ILIKE 路径,`source="keyword"`。详见 [§5.1.3 v1.1 LLM-to-SQL 实现说明](#513-v11-llm-to-sql-实现说明)。
 
 **请求体**
 
@@ -964,6 +966,7 @@ curl -X POST http://localhost/api/admin/materials \
 | 字段 | 类型 | 说明 |
 | ---- | ---- | ---- |
 | `aiPowered` | bool | `true` 表示走 LLM 语义排序；`false` 表示已降级为关键词检索 |
+| `source` | string | 枚举：`"llm"`（qwen-plus NL2SQL 召回）/ `"keyword"`（ILIKE 降级）。前端按 `source === "keyword"` 显示"降级中"徽标，其他视为 AI 命中 |
 | `score` | number | 0-1 之间的相关度；仅作 UI 调试，前端不必展示 |
 | `summary` | string | 一句话摘要；服务端从 `description` 与素材元数据截取，> 60 字截断 |
 
@@ -977,7 +980,56 @@ curl -X POST http://localhost/api/admin/materials \
 | 503 | `llm_unavailable` | 文案：AI 服务暂不可用，请稍后重试 |
 | 429 | `rate_limited` | 文案：操作过于频繁，请稍后再试 |
 
-> **降级行为**: 当 LLM 超时或不可用时，服务端自动退化为 DB 关键词检索（命中 `title/description` 与标签名），`aiPowered` 置 `false` 且不返回 `score`。前端不感知差异，仍按 `hits` 渲染。
+> **降级行为(v1.1)**: 当 LLM 超时、不可用、`DASHSCOPE_API_KEY` 未配置,或 LLM 输出的 SQL 未通过白名单校验(见 §5.1.3),服务端自动退化为 DB 关键词检索(命中 `title/description` 与标签名),`aiPowered` 置 `false` 且不返回 `score`。前端不感知差异,仍按 `hits` 渲染;`source` 字段返回 `"keyword"`,徽标显示"AI 智能搜索 · 降级中"。
+>
+> **超时配置**: 默认 `LLM_SQL_TIMEOUT_SECONDS=8`,单次 LLM 调用超过阈值即放弃本轮,回退关键词(默认不抛 `llm_timeout`,仅记 `WARNING` 日志;客户端拿到的是降级结果而非 504)。若需更激进的 504 行为,可调低 `LLM_SQL_TIMEOUT_SECONDS` 并在 FastAPI 路由层捕获 `asyncio.TimeoutError` 显式返回 504。
+
+#### 5.1.3 v1.1 LLM-to-SQL 实现说明
+
+> **适用范围**: 本段为后台实现说明,前台 / 客户端无需关心,仅供运维排障与新成员理解搜索降级路径使用。
+
+##### a) LLM 调用契约
+
+- 模型: `qwen-plus`(阿里云百炼,通过 `dashscope` SDK 调用)
+- 配置: `DASHSCOPE_API_KEY`(必填,留空 → LLM 禁用,全部走 ILIKE);`LLM_SEARCH_MODEL`(默认 `qwen-plus`);`LLM_SQL_TIMEOUT_SECONDS`(默认 8.0);`LLM_SQL_MAX_ROWS`(默认 20)
+- 调用入口: `backend/app/services/llm_sql.generate_sql(query, schema_hint=...)`;系统 prompt 在 `backend/app/services/llm_sql.py` 内固化,包含 5 张主表 + 3 张关联表的 schema、WHERE / LIMIT / 列名白名单要求
+- 失败语义: 超时 / 解析失败 / 返回 None → 触发降级,**不抛 504**
+
+##### b) 白名单校验(7 道闸)
+
+LLM 输出 SQL 字符串必须依次通过 [backend/app/services/_sql_safety.py](file:///d:/szp/work/learning-hub/backend/app/services/_sql_safety.py) 的 `validate_sql`,任一失败 → 记 WARNING → fallback 关键词:
+
+| # | 检查 | 规则 |
+| --- | --- | --- |
+| 1 | 去 markdown 包裹 | 剥离 ` ```sql ... ``` ` 或 ` ``` ... ``` ` |
+| 2 | 单语句 | 不允许 `;`(末尾一个可去掉) |
+| 3 | 无注释 | 不允许 `--`、`/*`、`*/` |
+| 4 | 首词 SELECT | `^\s*SELECT\b`,不区分大小写 |
+| 5 | 黑名单关键字(整词) | DROP/DELETE/UPDATE/INSERT/ALTER/CREATE/TRUNCATE/GRANT/REVOKE/EXEC/COPY/VACUUM/LOCK/COMMENT/SET/RESET/CALL/DO/UNION/INTERSECT/EXCEPT |
+| 6 | 表白名单 | FROM/JOIN 提取的表名必须在 `{courseware, category, tag, material, courseware_tag, courseware_material, courseware_access_token}`;不允许 `pg_*`、`information_schema` |
+| 7 | 强制 LIMIT | 显式 LIMIT 超过 50 时截断到 50;缺 LIMIT 时追加 `LIMIT {LLM_SQL_MAX_ROWS}` |
+
+##### c) 安全护栏(read-only 事务)
+
+通过校验的 SQL 在 `backend/app/services/llm_sql.execute_search_sql` 中按以下顺序执行:
+
+1. `db.execute(text("SET TRANSACTION READ ONLY"))` — 显式声明只读事务(防止 LLM 写出意外 DML)
+2. 同事务内执行 LLM 生成的 SELECT,只取 id 列(避免大字段 / N+1)
+3. 事务立即 rollback(语义上是只读,但 rollback 释放资源更彻底)
+4. 用拿到的 id 列表二次查询 `courseware` 主表,组装 `CoursewareItem` 返回
+
+> **注入面分析**: LLM 输出是字面量,**不绑定外部参数**(无 `?` / `:name`),SQLAlchemy `text()` 自带转义;`db.execute` 不接受任意 SQL 片段拼接外部参数,无传统 SQL 注入面。
+
+##### d) 降级路径表(运维排障用)
+
+| 触发条件 | 行为 | `source` | 日志 |
+| --- | --- | --- | --- |
+| `DASHSCOPE_API_KEY` 未配置 | 直接走 ILIKE | `keyword` | INFO `LLM disabled` |
+| `dashscope.Generation.call` 超时 / 抛异常 | fallback ILIKE | `keyword` | WARNING `LLM SQL search failed` |
+| LLM 返回 None / 空字符串 | fallback ILIKE | `keyword` | WARNING `LLM returned empty SQL` |
+| `validate_sql` 任一闸失败 | fallback ILIKE | `keyword` | WARNING `SQL safety check failed` |
+| 只读事务执行异常 | fallback ILIKE | `keyword` | WARNING `LLM SQL execution failed` |
+| 全部成功 | 返回 LLM 命中 | `llm` | INFO `LLM SQL search ok, ids=...` |
 
 #### 5.1.2 备选: `GET /api/public/coursewares/search?q=&topK=`
 

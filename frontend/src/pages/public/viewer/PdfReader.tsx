@@ -1,9 +1,11 @@
 /** PDF 阅读子组件：类似 Word 阅读样式。
  *
- * - 顶部工具条（缩放 −/+ / 当前比例 / 返回 / 下载）
+ * - 顶部工具条（缩放 −/+ / 当前比例 / 返回）
  * - 主体居中 max-w-[820px] 连续滚动
  * - 右下角圆角页码气泡 `第 N / M 页`
  * - 双击页面放大 / 还原
+ *
+ * P-VIEWER 范围：禁止任何"下载到本地"入口。`material.downloadUrl` 不再被引用。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PublicMaterialItem } from "@/api";
@@ -16,7 +18,9 @@ type Props = {
 };
 
 const SCALE_PRESETS = [0.75, 1.0, 1.25, 1.5, 2.0];
-const DEFAULT_SCALE = 1.25;
+// R-Viewer-PDF-1:PDF 默认按原始尺寸(100%)渲染,单页页面以其 canvas 实际宽度
+// 水平居中;窄屏时允许横向滚动查看完整内容。
+const DEFAULT_SCALE = 1.0;
 
 export function PdfReader({ material, onBack, onLogo }: Props) {
   const [scale, setScale] = useState<number>(DEFAULT_SCALE);
@@ -44,7 +48,7 @@ export function PdfReader({ material, onBack, onLogo }: Props) {
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
-        setError("PDF 加载失败，请检查网络或下载到本地查看");
+        setError("PDF 加载失败，请检查网络后刷新重试");
         setLoading(false);
         // eslint-disable-next-line no-console
         console.error("[PdfReader] load failed", e);
@@ -171,13 +175,6 @@ export function PdfReader({ material, onBack, onLogo }: Props) {
         <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700">
           PDF
         </span>
-        <a
-          data-testid="p-viewer-download-link"
-          href={material.downloadUrl}
-          className="text-sm text-primary-600 hover:underline"
-        >
-          下载到本地
-        </a>
       </header>
 
       <div
@@ -222,25 +219,20 @@ export function PdfReader({ material, onBack, onLogo }: Props) {
           </div>
         )}
         {error && (
-          <div className="text-center text-red-600 py-12">
+          <div
+            data-testid="p-viewer-pdf-error"
+            className="text-center text-red-600 py-12"
+          >
             {error}
-            <div className="mt-2">
-              <a
-                href={material.downloadUrl}
-                className="text-sm text-primary-600 hover:underline"
-              >
-                下载到本地
-              </a>
-            </div>
           </div>
         )}
         {!loading && !error && (
-          <div className="mx-auto max-w-[820px] space-y-4">
+          <div className="flex flex-col items-center gap-4 px-4">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
               <div
                 key={page}
                 data-page-number={page}
-                className="bg-white shadow-md"
+                className="inline-block bg-white shadow-md"
               >
                 <canvas ref={setCanvasRef(page)} />
               </div>

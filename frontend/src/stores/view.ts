@@ -55,8 +55,6 @@ function readUrl(): {
   return { view, q, id, coursewareId };
 }
 
-let urlTimer: number | null = null;
-
 export const useViewStore = create<ViewState>((set, get) => ({
   view: "home",
   q: "",
@@ -70,19 +68,31 @@ export const useViewStore = create<ViewState>((set, get) => ({
       id: next.id ?? cur.id,
       coursewareId: next.coursewareId ?? cur.coursewareId,
     };
+    // 修复:P-RESULT/P-DETAIL/P-LOCKED 点击“返回首页”需点两次的 bug。
+    // 原因: go({view: "home"}) 不重置 id/cw,导致 URL 仍带 ?id=…&cw=…,
+    // 下次 readUrl 启发式推断为 viewer,PublicShell 的 useEffect
+    // syncViewFromUrl 覆盖 store,页面跳到 P-VIEWER 而不是 P-HOME。
+    // 修复: view === "home" 是“离开”语义,显式重置 q / id / coursewareId,
+    // 同时让 URL 完全清空(?…  → ?),readUrl 重新推出 view=home。
+    if (merged.view === "home") {
+      merged.q = "";
+      merged.id = null;
+      merged.coursewareId = null;
+    }
     set(merged);
-    if (urlTimer != null) window.clearTimeout(urlTimer);
-    urlTimer = window.setTimeout(() => {
-      const params = new URLSearchParams();
-      if (merged.view !== "home") params.set("view", merged.view);
-      if (merged.q) params.set("q", merged.q);
-      if (merged.id != null) params.set("id", String(merged.id));
-      if (merged.coursewareId != null)
-        params.set("cw", String(merged.coursewareId));
-      const search = params.toString();
-      const url = `${window.location.pathname}${search ? "?" + search : ""}`;
-      window.history.replaceState(null, "", url);
-    }, 0);
+    // 修复:P-Viewer 返回需要点击两次才能回到 P-Detail 的 bug。
+    // 同步更新 URL(不要 setTimeout 异步),避免 React commit 与 useEffect 同步之间
+    // 的时序竞争——同步更新后,PublicShell 的 useEffect 在下次 render 时
+    // 读到的 location.search 与 store 一致,不会用旧 URL 覆盖新 store。
+    const params = new URLSearchParams();
+    if (merged.view !== "home") params.set("view", merged.view);
+    if (merged.q) params.set("q", merged.q);
+    if (merged.id != null) params.set("id", String(merged.id));
+    if (merged.coursewareId != null)
+      params.set("cw", String(merged.coursewareId));
+    const search = params.toString();
+    const url = `${window.location.pathname}${search ? "?" + search : ""}`;
+    window.history.replaceState(null, "", url);
   },
 }));
 

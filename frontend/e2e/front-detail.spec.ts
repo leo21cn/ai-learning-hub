@@ -94,7 +94,13 @@ test.describe.serial("F-019a / F-030..F-046 详情与解锁", () => {
     if ((await browseBtn.count()) > 0) {
       await expect(browseBtn).toHaveText("在线浏览");
     }
-    // 「下载到本地」链接作为兜底也存在
-    await expect(page.getByText("下载到本地").first()).toBeVisible();
+    // v1.2 起 P-DETAIL 不再提供「下载到本地」入口
+    await expect(
+      page.getByTestId("p-detail-material-download-link"),
+    ).toHaveCount(0);
+    await expect(page.locator('a:has-text("下载到本地")')).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="page-detail"] a[href*="/api/public/materials/"]'),
+    ).toHaveCount(0);
   });
 });

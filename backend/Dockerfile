@@ -34,6 +34,7 @@ EOF
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl \
     libreoffice-core libreoffice-impress libreoffice-common \
+    poppler-utils \
     fonts-dejavu fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
@@ -58,7 +59,8 @@ RUN mkdir -p /root/.pip && \
       "slowapi==0.1.9" \
       "redis==5.2.0" \
       "httpx==0.28.1" \
-      "PyJWT==2.10.1"
+      "PyJWT==2.10.1" \
+      "dashscope>=1.20.0"
 
 # Copy app source
 COPY app ./app

@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.errors import BusinessError, ErrorCode
 from app.models.association import courseware_material
 from app.models.material import Material, MaterialType, infer_type
-from app.services import ppt_to_pdf
+from app.services import ppt_to_images
 
 
 MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200MB
@@ -118,18 +118,21 @@ async def upload(db: Session, upload: UploadFile) -> Material:
         size_bytes=total,
         storage_path=str(full_path),
     )
-    # PPT/PPTX 后台转换为 PDF,用于在线浏览
+    # PPT/PPTX 后台拆成多张 PNG,用于在线浏览
     if mat_type == MaterialType.PPT:
         try:
-            preview_pdf = ppt_to_pdf.convert(full_path, full_path.parent)
-            if preview_pdf is not None:
-                obj.preview_pdf_path = str(preview_pdf)
+            result = ppt_to_images.convert(full_path)
+            if result is not None:
+                images_dir, page_count = result
+                obj.preview_images_dir = str(images_dir)
+                # 顺便记录 PPT 页数,前端不必再读 PDF
+                obj.duration_or_pages = str(page_count)
         except Exception as e:  # noqa: BLE001
             # 转换服务必须不能阻断上传
             import logging
 
             logging.getLogger(__name__).warning(
-                "ppt_to_pdf crashed unexpectedly for %s: %s", full_path, e
+                "ppt_to_images crashed unexpectedly for %s: %s", full_path, e
             )
     db.add(obj)
     try:
@@ -138,8 +141,10 @@ async def upload(db: Session, upload: UploadFile) -> Material:
         # 入库失败,清理文件
         try:
             full_path.unlink(missing_ok=True)
-            if obj.preview_pdf_path:
-                Path(obj.preview_pdf_path).unlink(missing_ok=True)
+            if obj.preview_images_dir:
+                import shutil as _shutil
+
+                _shutil.rmtree(obj.preview_images_dir, ignore_errors=True)
         except Exception:
             pass
         raise BusinessError(ErrorCode.MATERIAL_UPLOAD_FAILED, "文件写入失败") from e
@@ -158,18 +163,20 @@ def delete(db: Session, material_id: int) -> None:
     if ref:
         raise BusinessError(ErrorCode.MATERIAL_REFERENCED, "素材已被课件引用，无法删除")
     path = Path(obj.storage_path)
-    preview_path = Path(obj.preview_pdf_path) if obj.preview_pdf_path else None
+    preview_dir = Path(obj.preview_images_dir) if obj.preview_images_dir else None
     db.delete(obj)
     db.commit()
     # 物理删除
-    for p in (path, preview_path):
-        if p is None:
-            continue
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
+    if preview_dir is not None:
         try:
-            if p.exists():
-                p.unlink()
+            if preview_dir.exists():
+                shutil.rmtree(preview_dir, ignore_errors=True)
         except OSError:
-            # 文件已不在,不影响
             pass
 
 

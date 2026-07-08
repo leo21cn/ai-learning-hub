@@ -88,6 +88,14 @@ export default function App() {
           <Route path="/admin/materials" element={<MaterialsPage />} />
           <Route path="/admin/access-tokens" element={<AccessTokensPage />} />
           <Route path="/admin/coursewares" element={<CoursewaresPage />} />
+          <Route
+            path="/admin/coursewares/new"
+            element={<CoursewaresPage />}
+          />
+          <Route
+            path="/admin/coursewares/:id/edit"
+            element={<CoursewaresPage />}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

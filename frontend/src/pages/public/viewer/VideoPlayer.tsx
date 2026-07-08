@@ -1,8 +1,11 @@
 /** 视频播放子组件：简化版流媒体样式。
  *
  * - 左侧主播放区（深色背景）
- * - 右侧 280px 信息面板（类型/时长/大小/下载）
+ * - 右侧 280px 信息面板（类型/时长/大小）
  * - 标准 HTML5 video controls
+ *
+ * P-VIEWER 范围：禁止任何"下载到本地"入口。`material.downloadUrl` 不再被引用；
+ * 关闭 video 上的右键菜单 / contextmenu。
  */
 import { useEffect, useRef } from "react";
 import type { PublicMaterialItem } from "@/api";
@@ -89,13 +92,6 @@ export function VideoPlayer({ material, onBack, onLogo }: Props) {
         <span className="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700">
           视频
         </span>
-        <a
-          data-testid="p-viewer-download-link"
-          href={material.downloadUrl}
-          className="text-sm text-primary-600 hover:underline"
-        >
-          下载到本地
-        </a>
       </header>
 
       <div className="flex-1 grid gap-4 p-4 md:grid-cols-[1fr_280px]">
@@ -104,12 +100,14 @@ export function VideoPlayer({ material, onBack, onLogo }: Props) {
             ref={videoRef}
             data-testid="p-viewer-video"
             controls
+            controlsList="nodownload"
+            disablePictureInPicture
+            onContextMenu={(e) => e.preventDefault()}
             preload="metadata"
-            className="w-full max-h-[80vh]"
+            className="w-full max-h-[80vh] select-none"
             src={material.streamUrl}
           >
-            您的浏览器不支持 HTML5 视频播放，请
-            <a href={material.downloadUrl}>下载到本地</a>查看。
+            您的浏览器不支持 HTML5 视频播放，请使用现代浏览器查看。
           </video>
         </div>
 
@@ -137,12 +135,6 @@ export function VideoPlayer({ material, onBack, onLogo }: Props) {
               <dd>{formatSize(material.sizeBytes)}</dd>
             </div>
           </dl>
-          <a
-            href={material.downloadUrl}
-            className="inline-flex items-center text-sm text-primary-600 hover:underline"
-          >
-            下载到本地
-          </a>
         </aside>
       </div>
     </main>

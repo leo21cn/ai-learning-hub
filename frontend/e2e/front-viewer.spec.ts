@@ -14,7 +14,7 @@ import {
  * - F-049 PDF Word 式阅读
  * - F-050 PPT 幻灯片样式(在 CI 无 LibreOffice 时跳过实际预览)
  * - F-051 返回 P-DETAIL
- * - F-052 下载到本地兜底链接
+ * - F-052 P-VIEWER 三种样式均不提供下载入口（v1.2 起）
  * - F-053 PPT 全屏切换(在 CI 无 LibreOffice 时跳过)
  * - F-054 PDF 缩放
  *
@@ -27,6 +27,7 @@ import {
 
 /**
  * 把字符串编码成 UTF-8 字节数组(避免依赖 Buffer 全局类型)。
+ * Playwright 1.49 在 Windows 下会接受 Uint8Array。
  */
 function toBytes(str: string): Uint8Array {
   return new TextEncoder().encode(str);
@@ -85,8 +86,13 @@ test.describe.serial("F-047..F-054 P-VIEWER 在线浏览", () => {
     const browseBtn = page.getByTestId("p-detail-material-browse-btn").first();
     await expect(browseBtn).toBeVisible({ timeout: 10_000 });
     await expect(browseBtn).toHaveText("在线浏览");
-    // 下载到本地链接也存在
-    await expect(page.getByText("下载到本地").first()).toBeVisible();
+    // v1.2 起 P-DETAIL 也不提供"下载到本地"入口
+    await expect(
+      page.getByTestId("p-detail-material-download-link"),
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="page-detail"] a:has-text("下载到本地")'),
+    ).toHaveCount(0);
   });
 
   test("F-048 P-VIEWER-VIDEO 视频行内播放", async ({ page, request }) => {
@@ -120,6 +126,11 @@ test.describe.serial("F-047..F-054 P-VIEWER 在线浏览", () => {
     await expect(info).toContainText(/\.mp4$/);
     // 类型 + 大小
     await expect(info).toContainText(/视频/);
+    // v1.2 起 P-VIEWER 不再提供下载入口
+    await expect(page.getByTestId("p-viewer-download-link")).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="p-viewer-video-root"] a:has-text("下载到本地")'),
+    ).toHaveCount(0);
   });
 
   test("F-049 P-VIEWER-PDF PDF Word 式阅读(工具条 + 页码气泡)", async ({
@@ -154,6 +165,11 @@ test.describe.serial("F-047..F-054 P-VIEWER 在线浏览", () => {
     await expect(page.getByTestId("p-viewer-pdf-toolbar")).toBeVisible();
     // 页码指示器存在
     await expect(page.getByTestId("p-viewer-pdf-page-indicator")).toBeVisible();
+    // v1.2 起 P-VIEWER 不再提供下载入口
+    await expect(page.getByTestId("p-viewer-download-link")).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="p-viewer-pdf-root"] a:has-text("下载到本地")'),
+    ).toHaveCount(0);
   });
 
   test("F-051 P-VIEWER 返回 P-DETAIL(三种样式共用)", async ({
@@ -183,7 +199,10 @@ test.describe.serial("F-047..F-054 P-VIEWER 在线浏览", () => {
     await expect(page).toHaveURL(/view=detail/, { timeout: 10_000 });
   });
 
-  test("F-052 P-VIEWER 下载到本地兜底链接可用", async ({ page, request }) => {
+  test("F-052 P-VIEWER 不提供任何下载入口(VIDEO)", async ({
+    page,
+    request,
+  }) => {
     await adminLogin(request);
     const leaf = await ensureLeafCategory(request, `f052-${Date.now()}`);
     const mid = await uploadMaterial(
@@ -204,10 +223,70 @@ test.describe.serial("F-047..F-054 P-VIEWER 在线浏览", () => {
     await page.getByTestId("p-detail-material-browse-btn").first().click();
     await expect(page).toHaveURL(/view=viewer/, { timeout: 10_000 });
 
-    const downloadLink = page.getByTestId("p-viewer-download-link");
-    await expect(downloadLink).toBeVisible();
-    const href = await downloadLink.getAttribute("href");
-    expect(href).toContain(`/api/public/materials/${mid}/file`);
+    // P-VIEWER-VIDEO 根可见
+    await expect(page.getByTestId("p-viewer-video-root")).toBeVisible({
+      timeout: 15_000,
+    });
+    // 1) p-viewer-download-link 不存在
+    await expect(page.getByTestId("p-viewer-download-link")).toHaveCount(0);
+    // 2) VIDEO 根作用域内不含文字链接 "下载到本地"
+    await expect(
+      page.locator(
+        '[data-testid="p-viewer-video-root"] a:has-text("下载到本地")',
+      ),
+    ).toHaveCount(0);
+    // 3) 顶栏 / 信息面板中不含任何 href 指向 /api/public/materials/{id}/file 的 a / button
+    const viewerScope = '[data-testid="p-viewer-video-root"]';
+    const downloadTargets = page.locator(
+      `${viewerScope} a[href*="/api/public/materials/"], ${viewerScope} button[data-download-url]`,
+    );
+    await expect(downloadTargets).toHaveCount(0);
+    // 4) v1.2 起返回 P-DETAIL 后也确认无任何下载入口
+    await page.getByTestId("p-viewer-back-btn").click();
+    await expect(page).toHaveURL(/view=detail/, { timeout: 10_000 });
+    await expect(
+      page.getByTestId("p-detail-material-download-link"),
+    ).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="page-detail"] a:has-text("下载到本地")'),
+    ).toHaveCount(0);
+  });
+
+  test("F-052 P-VIEWER 不提供任何下载入口(PDF)", async ({
+    page,
+    request,
+  }) => {
+    await adminLogin(request);
+    const leaf = await ensureLeafCategory(request, `f052b-${Date.now()}`);
+    const mid = await uploadMaterial(
+      request,
+      `f052b-${Date.now()}.pdf`,
+      toBytes("%PDF-1.4 minimal pdf body"),
+      "application/pdf",
+    );
+    const title = `f052b-course-${Date.now()}`;
+    await createCourseware(request, {
+      title,
+      categoryId: leaf,
+      materialIds: [mid],
+    });
+
+    await page.goto(`/?q=${title}`);
+    await page.getByText(title).first().click();
+    await page.getByTestId("p-detail-material-browse-btn").first().click();
+    await expect(page).toHaveURL(/view=viewer/, { timeout: 10_000 });
+
+    await expect(page.getByTestId("p-viewer-pdf-root")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId("p-viewer-download-link")).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="p-viewer-pdf-root"] a:has-text("下载到本地")'),
+    ).toHaveCount(0);
+    const downloadTargets = page.locator(
+      '[data-testid="p-viewer-pdf-root"] a[href*="/api/public/materials/"]',
+    );
+    await expect(downloadTargets).toHaveCount(0);
   });
 
   test("F-054 P-VIEWER-PDF 缩放控件", async ({ page, request }) => {

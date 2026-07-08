@@ -55,9 +55,16 @@ export async function ensureLeafCategory(
   const midId = midBody.data.id;
 
   // 三级叶子
+  // 名称最长 30 字符；用 hash + 时间戳后 6 位保证幂等且避免超长。
+  const ts = Date.now().toString(36).slice(-6);
   const leaf = await request.post("/api/admin/categories", {
-    data: { name: `${prefix}-leaf-${Date.now()}`, parentId: midId },
+    data: { name: `${prefix.slice(0, 12)}-l-${ts}`, parentId: midId },
   });
+  if (!leaf.ok()) {
+    throw new Error(
+      `ensureLeafCategory leaf failed: ${leaf.status()} ${await leaf.text()}`,
+    );
+  }
   const leafBody = await leaf.json();
   return leafBody.data.id;
 }
