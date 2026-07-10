@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AccessTokenAPI,
   type AccessTokenCreated,
@@ -169,6 +170,13 @@ export function AccessTokensPage() {
                       : "-"}
                   </td>
                   <td className="px-4 py-2 text-right space-x-2">
+                    <Link
+                      to={`/admin/access-tokens/${t.id}/usage`}
+                      data-testid={`token-usage-${t.id}`}
+                      className="px-2 py-1 text-primary-600 hover:bg-primary-50 rounded inline-block"
+                    >
+                      访问记录
+                    </Link>
                     <button
                       onClick={() => setConfirmRegen(t)}
                       data-testid={`token-regen-${t.id}`}

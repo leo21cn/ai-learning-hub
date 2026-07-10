@@ -4,7 +4,7 @@ import { toast } from "@/stores/toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const TYPE_LABELS: Record<string, string> = { VIDEO: "视频", PDF: "PDF", PPT: "PPT" };
-const MAX_SIZE_BYTES = 200 * 1024 * 1024; // 与后端 MATERIAL_SIZE_EXCEEDED / nginx client_max_body_size 对齐
+const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 与后端 MAX_SIZE_BYTES、nginx client_max_body_size 对齐
 
 function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
@@ -41,12 +41,12 @@ function friendlyUploadError(e: unknown, fileName: string): string {
 }
 
 export function MaterialsPage() {
-  const [data, setData] = useState<{ items: MaterialItem[]; total: number; page: number; size: number }>({
-    items: [],
-    total: 0,
-    page: 1,
-    size: 20,
-  });
+  // 分页状态:与 Coursewares 对齐(SIZE=15/页)。
+  // 后端 list_paged 已实现 OFFSET/LIMIT + total,前端只需正确传 page/size。
+  const [items, setItems] = useState<MaterialItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const SIZE = 15;
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [uploading, setUploading] = useState(false);
@@ -59,14 +59,15 @@ export function MaterialsPage() {
       const resp = await MaterialAPI.list({
         keyword: keyword || undefined,
         type: typeFilter || undefined,
-        page: 1,
-        size: 200,
+        page,
+        size: SIZE,
       });
-      setData(resp);
+      setItems(resp.items);
+      setTotal(resp.total);
     } catch (e) {
       toast((e as Error).message || "加载失败", "error");
     }
-  }, [keyword, typeFilter]);
+  }, [keyword, typeFilter, page]);
 
   useEffect(() => {
     reload();
@@ -151,14 +152,20 @@ export function MaterialsPage() {
           <h2 className="text-base font-semibold flex-1">素材列表</h2>
           <input
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => {
+              setKeyword(e.target.value);
+              setPage(1);
+            }}
             placeholder="搜索名称"
             data-testid="material-search"
             className="border border-slate-300 rounded px-2 py-1 text-sm w-48"
           />
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTypeFilter(e.target.value);
+              setPage(1);
+            }}
             data-testid="material-type-filter"
             className="border border-slate-300 rounded px-2 py-1 text-sm"
           >
@@ -168,11 +175,11 @@ export function MaterialsPage() {
             <option value="PPT">PPT</option>
           </select>
           <span className="text-xs text-slate-500" data-testid="material-total">
-            共 {data.total} 个
+            共 {total} 个
           </span>
         </div>
 
-        {data.items.length === 0 ? (
+        {items.length === 0 ? (
           <div className="text-slate-400 text-sm" data-testid="empty-hint">
             暂无素材
           </div>
@@ -189,7 +196,7 @@ export function MaterialsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.items.map((m) => (
+              {items.map((m) => (
                 <tr key={m.id} className="border-b border-slate-100" data-testid={`material-row-${m.id}`}>
                   <td className="py-2 pr-2 font-medium text-slate-800">{m.name}</td>
                   <td className="py-2 pr-2">
@@ -223,6 +230,34 @@ export function MaterialsPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {/* 分页:与 Coursewares.tsx 一致风格;仅当总条数超 1 页时显示 */}
+        {total > SIZE && (
+          <div className="mt-4 flex justify-center items-center gap-2">
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              data-testid="material-prev-page"
+              className="px-3 py-1 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-50"
+            >
+              上一页
+            </button>
+            <span
+              className="px-3 py-1 text-slate-600 text-sm"
+              data-testid="material-pager-info"
+            >
+              第 {page} 页 / 共 {Math.ceil(total / SIZE)} 页
+            </span>
+            <button
+              disabled={page * SIZE >= total}
+              onClick={() => setPage((p) => p + 1)}
+              data-testid="material-next-page"
+              className="px-3 py-1 border border-slate-300 rounded disabled:opacity-40 hover:bg-slate-50"
+            >
+              下一页
+            </button>
+          </div>
         )}
       </div>
 

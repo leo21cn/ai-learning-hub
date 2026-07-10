@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   useLocation,
   useNavigate,
   useParams,
@@ -184,6 +201,277 @@ function CategoryTree({
   );
 }
 
+// ==================== 素材顺序排序器（v1.5+） ====================
+
+/**
+ * MaterialSorter：课件表单中的素材拖拽排序组件。
+ * - 左栏「素材库」：未被课件引用的素材，点击 + 加入右栏末尾；
+ * - 右栏「已选顺序」：使用 @dnd-kit 拖拽 / 键盘排序；× 移除。
+ * - 支持鼠标拖拽 + 键盘（Tab 聚焦手柄 → Space 抓取 → ↑/↓ 移动 → Space 释放 → Esc 取消）。
+ */
+type MaterialSorterProps = {
+  available: MaterialItem[];
+  selected: MaterialItem[];
+  onChange: (next: MaterialItem[]) => void;
+  keyword: string;
+  onKeywordChange: (kw: string) => void;
+  typeFilter: string;
+  onTypeFilterChange: (t: string) => void;
+};
+
+function MaterialSorter({
+  available,
+  selected,
+  onChange,
+  keyword,
+  onKeywordChange,
+  typeFilter,
+  onTypeFilterChange,
+}: MaterialSorterProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const selectedIds = selected.map((m) => m.id);
+
+  const filteredAvailable = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return available.filter((m) => {
+      if (typeFilter && m.type !== typeFilter) return false;
+      if (kw && !m.name.toLowerCase().includes(kw)) return false;
+      if (selectedIds.includes(m.id)) return false;
+      return true;
+    });
+  }, [available, keyword, typeFilter, selectedIds]);
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = selectedIds.indexOf(Number(active.id));
+    const newIdx = selectedIds.indexOf(Number(over.id));
+    if (oldIdx < 0 || newIdx < 0) return;
+    onChange(arrayMove(selected, oldIdx, newIdx));
+  };
+
+  const add = (m: MaterialItem) => {
+    if (selectedIds.includes(m.id)) return;
+    onChange([...selected, m]);
+  };
+
+  const remove = (id: number) => {
+    onChange(selected.filter((m) => m.id !== id));
+  };
+
+  const move = (id: number, dir: -1 | 1) => {
+    const idx = selectedIds.indexOf(id);
+    if (idx < 0) return;
+    const target = idx + dir;
+    if (target < 0 || target >= selected.length) return;
+    onChange(arrayMove(selected, idx, target));
+  };
+
+  return (
+    <div
+      className="grid grid-cols-1 md:grid-cols-2 gap-3"
+      data-testid="cw-material-sorter"
+    >
+      {/* 左栏：素材库 */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            value={keyword}
+            onChange={(e) => onKeywordChange(e.target.value)}
+            placeholder="按素材名称筛选"
+            data-testid="cw-material-search"
+            className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm"
+          />
+          <select
+            value={typeFilter}
+            onChange={(e) => onTypeFilterChange(e.target.value)}
+            data-testid="cw-material-type"
+            className="border border-slate-300 rounded px-2 py-1 text-sm"
+          >
+            <option value="">全部类型</option>
+            <option value="VIDEO">视频</option>
+            <option value="PDF">PDF</option>
+            <option value="PPT">PPT</option>
+          </select>
+        </div>
+        <div className="max-h-60 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50">
+          {available.length === 0 && (
+            <p className="text-xs text-slate-400">暂无素材</p>
+          )}
+          {available.length > 0 && filteredAvailable.length === 0 && (
+            <p className="text-xs text-slate-400">没有可添加的素材</p>
+          )}
+          {filteredAvailable.map((m) => (
+            <div
+              key={m.id}
+              data-testid={`cw-material-available-${m.id}`}
+              className="flex items-center justify-between text-sm py-1 px-1 hover:bg-white rounded"
+            >
+              <span className="truncate min-w-0 flex-1">
+                {m.name}{" "}
+                <span className="text-xs text-slate-400">
+                  ({m.type}, {Math.round(m.sizeBytes / 1024)}KB)
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => add(m)}
+                data-testid={`cw-material-add-${m.id}`}
+                className="ml-2 text-xs px-2 py-0.5 text-primary-600 hover:bg-primary-50 rounded shrink-0"
+              >
+                + 添加
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 右栏：已选顺序 */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-slate-600">
+            按学习顺序拖拽调整（序号越小越靠前）
+          </span>
+          <span className="text-xs text-slate-500">
+            已选 {selected.length}
+          </span>
+        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={selectedIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <div
+              className="max-h-60 overflow-y-auto border border-slate-200 rounded p-2 bg-white"
+              data-testid="cw-material-selected-list"
+            >
+              {selected.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-4">
+                  请从左侧添加素材
+                </p>
+              )}
+              {selected.map((m, idx) => (
+                <SortableMaterialRow
+                  key={m.id}
+                  material={m}
+                  index={idx}
+                  onRemove={() => remove(m.id)}
+                  onMoveUp={() => move(m.id, -1)}
+                  onMoveDown={() => move(m.id, 1)}
+                  canUp={idx > 0}
+                  canDown={idx < selected.length - 1}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+    </div>
+  );
+}
+
+function SortableMaterialRow({
+  material,
+  index,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  canUp,
+  canDown,
+}: {
+  material: MaterialItem;
+  index: number;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canUp: boolean;
+  canDown: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: material.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      data-testid={`cw-material-sorter-row-${material.id}`}
+      className={`flex items-center gap-2 text-sm py-1 px-1 border rounded mb-1 ${
+        isDragging ? "border-primary-300 bg-primary-50" : "border-slate-200"
+      }`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        data-testid={`cw-material-sorter-handle-${material.id}`}
+        aria-label={`拖动 ${material.name} 以调整顺序`}
+        className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 px-1 select-none"
+        title="拖拽 / 键盘排序"
+      >
+        ⋮⋮
+      </button>
+      <span className="text-xs text-slate-500 w-6 text-center shrink-0">
+        {index + 1}
+      </span>
+      <span className="truncate min-w-0 flex-1">
+        {material.name}{" "}
+        <span className="text-xs text-slate-400">
+          ({material.type}, {Math.round(material.sizeBytes / 1024)}KB)
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onMoveUp}
+        disabled={!canUp}
+        data-testid={`cw-material-sorter-up-${material.id}`}
+        className="text-xs px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
+        title="上移"
+      >
+        ▲
+      </button>
+      <button
+        type="button"
+        onClick={onMoveDown}
+        disabled={!canDown}
+        data-testid={`cw-material-sorter-down-${material.id}`}
+        className="text-xs px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30"
+        title="下移"
+      >
+        ▼
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        data-testid={`cw-material-sorter-remove-${material.id}`}
+        className="text-xs px-1 text-rose-500 hover:text-rose-700"
+        title="移除"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export function CoursewaresPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -212,7 +500,8 @@ export function CoursewaresPage() {
   const [items, setItems] = useState<CoursewareItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [size] = useState(20);
+  // 分页大小(SIZE=15/页),与 Materials 保持一致;后端 list_paged 已实现 OFFSET/LIMIT + total。
+  const [size] = useState(15);
   const [loading, setLoading] = useState(false);
   const [confirmDel, setConfirmDel] = useState<CoursewareItem | null>(null);
 
@@ -556,9 +845,33 @@ function CoursewareForm({
     initial?.accessMode ?? "OPEN",
   );
   const [tagIds, setTagIds] = useState<number[]>(initial?.tagIds ?? []);
-  const [materialIds, setMaterialIds] = useState<number[]>(
-    initial?.materialIds ?? [],
-  );
+  // v1.5+: selectedMaterials 保持顺序（课件内的展示顺序），
+  // materialIds 仅在提交时从 selectedMaterials 派生。
+  const materialsById = useMemo(() => {
+    const m = new Map<number, MaterialItem>();
+    materials.forEach((mi) => m.set(mi.id, mi));
+    initial?.materials?.forEach((mi) => {
+      if (!m.has(mi.id)) {
+        m.set(mi.id, {
+          id: mi.id,
+          name: mi.name,
+          type: mi.type as MaterialItem["type"],
+          sizeBytes: mi.sizeBytes,
+          duration: mi.duration ?? null,
+          uploadedAt: null,
+          referenced: true,
+          downloadUrl: mi.downloadUrl ?? "",
+        });
+      }
+    });
+    return m;
+  }, [materials, initial]);
+  const [selectedMaterials, setSelectedMaterials] = useState<MaterialItem[]>(() => {
+    if (!initial) return [];
+    return (initial.materials ?? [])
+      .map((m) => materialsById.get(m.id))
+      .filter((m): m is MaterialItem => Boolean(m));
+  });
   const [tokenIds, setTokenIds] = useState<number[]>(initial?.tokenIds ?? []);
   const [saving, setSaving] = useState(false);
 
@@ -566,15 +879,6 @@ function CoursewareForm({
   const [materialKeyword, setMaterialKeyword] = useState("");
   const [materialTypeFilter, setMaterialTypeFilter] = useState<string>("");
   const [tokenKeyword, setTokenKeyword] = useState("");
-
-  const filteredMaterials = useMemo(() => {
-    const kw = materialKeyword.trim().toLowerCase();
-    return materials.filter((m) => {
-      if (materialTypeFilter && m.type !== materialTypeFilter) return false;
-      if (kw && !m.name.toLowerCase().includes(kw)) return false;
-      return true;
-    });
-  }, [materials, materialKeyword, materialTypeFilter]);
 
   const filteredTokens = useMemo(() => {
     const kw = tokenKeyword.trim().toLowerCase();
@@ -606,6 +910,8 @@ function CoursewareForm({
     }
     setSaving(true);
     try {
+      // materialIds 由 selectedMaterials 按当前顺序导出
+      const orderedMaterialIds = selectedMaterials.map((m) => m.id);
       const payload = {
         title: trimmedTitle,
         author: author.trim() || undefined,
@@ -613,7 +919,7 @@ function CoursewareForm({
         description: description || undefined,
         accessMode,
         tagIds,
-        materialIds,
+        materialIds: orderedMaterialIds,
         tokenIds: accessMode === "RESTRICTED" ? tokenIds : [],
       };
       if (initial) {
@@ -822,72 +1128,20 @@ function CoursewareForm({
 
         <div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-700">关联素材</span>
+            <span className="text-sm text-slate-700">关联素材（学习顺序）</span>
             <span className="text-xs text-slate-500">
-              已选 {materialIds.length} / 共 {materials.length}
+              已选 {selectedMaterials.length} / 共 {materials.length}
             </span>
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              value={materialKeyword}
-              onChange={(e) => setMaterialKeyword(e.target.value)}
-              placeholder="按素材名称筛选"
-              data-testid="cw-material-search"
-              className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm"
-            />
-            <select
-              value={materialTypeFilter}
-              onChange={(e) => setMaterialTypeFilter(e.target.value)}
-              data-testid="cw-material-type"
-              className="border border-slate-300 rounded px-2 py-1 text-sm"
-            >
-              <option value="">全部类型</option>
-              <option value="VIDEO">视频</option>
-              <option value="PDF">PDF</option>
-              <option value="PPT">PPT</option>
-            </select>
-            {(materialKeyword || materialTypeFilter) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMaterialKeyword("");
-                  setMaterialTypeFilter("");
-                }}
-                className="text-xs text-slate-500 hover:text-slate-700"
-              >
-                清除
-              </button>
-            )}
-          </div>
-          <div className="mt-1 flex flex-col gap-1 max-h-40 overflow-y-auto border border-slate-200 rounded p-2">
-            {materials.length === 0 && (
-              <span className="text-xs text-slate-400">暂无素材</span>
-            )}
-            {materials.length > 0 && filteredMaterials.length === 0 && (
-              <span className="text-xs text-slate-400">
-                没有匹配的素材
-              </span>
-            )}
-            {filteredMaterials.map((m) => (
-              <label key={m.id} className="inline-flex items-center text-sm">
-                <input
-                  type="checkbox"
-                  checked={materialIds.includes(m.id)}
-                  onChange={(e) => {
-                    if (e.target.checked)
-                      setMaterialIds((s) => [...s, m.id]);
-                    else setMaterialIds((s) => s.filter((x) => x !== m.id));
-                  }}
-                />
-                <span className="ml-1">
-                  {m.name}{" "}
-                  <span className="text-xs text-slate-400">
-                    ({m.type}, {Math.round(m.sizeBytes / 1024)}KB)
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
+          <MaterialSorter
+            available={materials}
+            selected={selectedMaterials}
+            onChange={setSelectedMaterials}
+            keyword={materialKeyword}
+            onKeywordChange={setMaterialKeyword}
+            typeFilter={materialTypeFilter}
+            onTypeFilterChange={setMaterialTypeFilter}
+          />
         </div>
       </div>
 

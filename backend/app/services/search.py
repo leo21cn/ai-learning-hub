@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -27,6 +28,78 @@ from app.models.courseware import Courseware
 from app.services import llm_sql
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 中文查询“清洗”
+# ============================================================
+# 背景:keyword 兑底路径在 LLM 不可用时,只能对原始查询字符串做 ILIKE。
+# 用户输入常带“帮我找一下与项目管理相关的课件”这种“废话”,直接用原句
+# 做 ILIKE 命中率很低(标题里没有“帮我找一下”)。下面的正则将常见问题句式
+# 进行规范化、提取潜在核心名词,允许多个候选输入 ILIKE 依次尝试。
+_CN_QUERY_TRIM_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
+    # 表礼貌/求助语气: “请帮我找一找、麻烦帮我查一下” → 去掉头部
+    (re.compile(r"^(请|麻烦|劳驾)?(帮|为|替|给)(我|我们|咱)?(找一?找|寻|搜一?下|搜|查一?下|查|看一下|看下|了解|学习|查询|检索|扒|怼|给)"), ""),
+    # 表 “一下”软化语气, 可去
+    (re.compile(r"一下(吧|吗|呀|呗)?$"), ""),
+    # 表 “与/跟/和 XX 相关(的)…” → 保留中心词 "XX"
+    # 例: "与项目管理相关的课件" -> "项目管理", "跟 BJC 有关系的视频" -> "BJC"
+    (re.compile(r"(与|跟|和|关于)([^,。?!\s]+?)(相关|有关|相关 的|有关 的)的?"), r"\2"),
+    # 表 "XX有哪些/给我XX的资料/帮我XX的" → 保留 XX
+    (re.compile(r"(有|来给|给我|我要|帮我|向我们|推荐)([^,。?!\s]{2,})"), r"\2"),
+    # 广泛型平台术语: “课件/课程/资料/文档/视频/PPT/PDF” 这些不算独立检索词, 删除后留出纯关键词
+    (re.compile(r"(课件|课程|资料|文档|视频|PPT|PPTX|PDF)(的|方面|集合|合集|列表)?"), ""),
+]
+
+# 额外过滤一些高频准停用词(单个字)以免误检索
+_CN_STOPWORDS: frozenset = frozenset({
+    "我", "你", "他", "她", "它", "们", "的", "了", "是", "在", "有", "和", "与", "跟",
+    "以及", "和", "及", "请", "帮我", "麻烦", "劳驾", "一下", "若干", "哪个", "哪些",
+    "什么", "怎么", "如何", "为啥", "为什么",
+})
+
+
+def _cn_tokenize(q: str) -> List[str]:
+    """从原始问题中抽取若干“可以拿去 ILIKE”的候选关键字符串。
+
+    算法:
+    1. 原始输入;只 strip 后作为第一候选
+    2. 依次应用 _CN_QUERY_TRIM_PATTERNS 上的正则, 生成“净化后”的变体(取group或空)
+    3. 过滤空字符串、去过抖、CJK字符<2 的项
+
+    返回: 按优先级排序的不重复候选列表(原始串在前面)。
+    """
+    if not q:
+        return []
+    original = q.strip()
+    if not original:
+        return []
+    candidates: List[str] = []
+
+    def _add(s: str) -> None:
+        s = s.strip()
+        if not s or len(s) < 2:
+            return
+        if all(ch in _CN_STOPWORDS for ch in s):
+            return
+        if s not in candidates:
+            candidates.append(s)
+
+    _add(original)
+
+    # 逐次应用裁剪正则, 最多 4 轮防正循环
+    cur = original
+    for _ in range(4):
+        prev = cur
+        for pat, repl in _CN_QUERY_TRIM_PATTERNS:
+            nxt = pat.sub(repl, cur).strip()
+            if nxt and nxt != cur:
+                _add(nxt)
+                cur = nxt
+        if cur == prev:
+            break
+
+    return candidates
 
 
 @dataclass
@@ -41,37 +114,50 @@ class SearchResult:
 # ============================================================
 def _keyword_hits(db: Session, keyword: str, size: int) -> List[Dict[str, Any]]:
     """关键词 ILIKE 搜索(标题/作者/描述/标签名)。空关键词时返回最新。"""
-    q = (keyword or "").strip()
-    base = select(Courseware).options(
-        selectinload(Courseware.tags),
-        selectinload(Courseware.access_tokens),
-        selectinload(Courseware.materials),
-        selectinload(Courseware.category),
+    base = (
+        select(Courseware)
+        .options(
+            selectinload(Courseware.tags),
+            selectinload(Courseware.access_tokens),
+            selectinload(Courseware.materials),
+            selectinload(Courseware.category),
+        )
+        .order_by(Courseware.updated_at.desc())
+        .limit(size)
     )
 
-    if q:
-        pattern = f"%{q}%"
+    if keyword:
         from app.models.tag import Tag
         from app.models.association import courseware_tag
 
-        tag_match = (
-            select(courseware_tag.c.courseware_id)
-            .join(Tag, courseware_tag.c.tag_id == Tag.id)
-            .where(Tag.name.ilike(pattern))
-        )
-        base = base.where(
-            or_(
-                Courseware.title.ilike(pattern),
-                Courseware.author.ilike(pattern),
-                Courseware.description.ilike(pattern),
-                Courseware.id.in_(tag_match),
-            )
-        )
+        candidates = _cn_tokenize(keyword)
 
-    rows = db.scalars(base.order_by(Courseware.updated_at.desc()).limit(size)).all()
+        # OR 多个候选 ILIKE, 默认取最大集合;避免句子里骠说明话后漏检
+        or_clauses = []
+        seen_ids: set = set()
+        for cand in candidates:
+            pattern = f"%{cand}%"
+            or_clauses.append(
+                or_(
+                    Courseware.title.ilike(pattern),
+                    Courseware.author.ilike(pattern),
+                    Courseware.description.ilike(pattern),
+                )
+            )
+        # 用 EXISTS 联合 tag.name 匹配, 避免大表 JOIN 成本
+        from sqlalchemy import exists
+        tag_match_expr = exists().where(
+            (Tag.id == courseware_tag.c.tag_id)
+            & (courseware_tag.c.courseware_id == Courseware.id)
+            & or_(*[Tag.name.ilike(f"%{c}%") for c in candidates])
+        )
+        if or_clauses:
+            base = base.where(or_(*or_clauses) | tag_match_expr)
+
+    rows = db.scalars(base).all()
     from app.services.courseware import _to_item  # 局部复用,避免循环
 
-    return [_to_item(r, downloadable=False) for r in rows]
+    return [_to_item(db, r, downloadable=False) for r in rows]  # type: ignore[arg-type]  # noqa: E501
 
 
 # ============================================================
@@ -100,7 +186,7 @@ def _fetch_coursewares(
     for cid in ids_in_order[:size]:
         obj = by_id.get(cid)
         if obj is not None:
-            items.append(_to_item(obj, downloadable=False))
+            items.append(_to_item(db, obj, downloadable=False))
     return items
 
 

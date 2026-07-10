@@ -65,7 +65,6 @@ export function LoginPage() {
             {loading ? "验证中..." : "登录"}
           </button>
         </form>
-        <p className="text-center text-xs text-slate-400 mt-4">演示 Token: demo</p>
       </div>
     </main>
   );

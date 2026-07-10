@@ -30,11 +30,12 @@ Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp
 EOF
 
-# Install system deps for psycopg2 + uvicorn[standard] + LibreOffice (PPT→PDF)
+# Install system deps for psycopg2 + uvicorn[standard] + LibreOffice (PPT→PDF) + ffmpeg (VIDEO 时长探测)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl \
     libreoffice-core libreoffice-impress libreoffice-common \
     poppler-utils \
+    ffmpeg \
     fonts-dejavu fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
@@ -67,6 +68,7 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY entrypoint.sh ./entrypoint.sh
+COPY backfill_video_durations.py ./backfill_video_durations.py
 RUN chmod +x ./entrypoint.sh
 
 # Storage dir for materials

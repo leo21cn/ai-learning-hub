@@ -73,7 +73,7 @@ def public_get_courseware(
         allowed_hashes = {t.value_hash for t in (obj.access_tokens or [])}
         if provided_hash not in allowed_hashes:
             raise BusinessError(ErrorCode.COURSEWARE_ACL_LOCKED, "令牌无效或已失效")
-    return ok(data=svc._to_item(obj, downloadable=True))
+    return ok(data=svc._to_item(db, obj, downloadable=True))
 
 
 @router.post("/{courseware_id}/unlock", status_code=status.HTTP_200_OK)

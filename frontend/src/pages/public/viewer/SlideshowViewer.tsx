@@ -18,23 +18,24 @@ type Props = {
 export function SlideshowViewer({ material, onBack, onLogo }: Props) {
   const imageUrls = material.imageUrls ?? [];
   const total = imageUrls.length;
+  // current: 屏幕上可见的页码
+  // pendingPage: 用户请求切换的下一页(未加载完时不更新 current)
   const [current, setCurrent] = useState<number>(1);
-  const [transitioning, setTransitioning] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [pendingPage, setPendingPage] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // 切页淡入淡出
+  // 切页:保持当前页不变,后台预加载下一页,
+  // 加载完成后一次性替换为新页(不淡出,无中间闪烁)。
   const goto = useCallback(
     (page: number) => {
-      if (page < 1 || page > total || page === current) return;
-      setTransitioning(true);
-      window.setTimeout(() => {
-        setCurrent(page);
-        window.setTimeout(() => setTransitioning(false), 60);
-      }, 120);
+      if (page < 1 || page > total) return;
+      // 同一页或已在加载同一页 → 忽略
+      if (page === current || page === pendingPage) return;
+      setError(null);
+      setPendingPage(page);
     },
-    [current, total],
+    [current, pendingPage, total],
   );
 
   const prev = useCallback(() => goto(current - 1), [goto, current]);
@@ -66,20 +67,24 @@ export function SlideshowViewer({ material, onBack, onLogo }: Props) {
     }
   }, []);
 
-  const handleImgLoad = useCallback(() => setLoading(false), []);
-  const handleImgError = useCallback(() => {
-    setLoading(false);
-    setError("图片加载失败，请刷新重试");
-  }, []);
-
-  // 当切页时立即显示 loading 直到新图片 load 完
-  useEffect(() => {
-    setLoading(true);
-  }, [current]);
+  // 预加载下一页:放在独立的隐藏 <img> 中,加载完才把 current 切换到新页。
+  // 这样用户看到的始终是 current 页(不变),直到新页准备就绪一次性跳变,体验与 PPT 一致。
+  const handlePendingLoad = useCallback(() => {
+    if (pendingPage == null) return;
+    setCurrent(pendingPage);
+    setPendingPage(null);
+  }, [pendingPage]);
+  const handlePendingError = useCallback(() => {
+    if (pendingPage == null) return;
+    setError(`第 ${pendingPage} 页加载失败，请刷新重试`);
+    setPendingPage(null);
+  }, [pendingPage]);
 
   // 当素材切换时回到第 1 页
   useEffect(() => {
     setCurrent(1);
+    setPendingPage(null);
+    setError(null);
   }, [material.id]);
 
   const isFirst = current <= 1;
@@ -177,32 +182,53 @@ export function SlideshowViewer({ material, onBack, onLogo }: Props) {
 
       <div
         data-testid="p-viewer-ppt"
-        className="flex-1 flex items-center justify-center p-6 min-h-[60vh]"
+        className="flex-1 flex items-center justify-center p-6 min-h-[60vh] relative"
       >
-        {loading && (
-          <div className="text-slate-300">正在加载幻灯片…</div>
-        )}
-        {error && (
+        {error ? (
           <div
             data-testid="p-viewer-ppt-error"
             className="text-red-300 text-center"
           >
             {error}
           </div>
+        ) : (
+          <>
+            {/* 主图:始终显示 current 页;预加载期间不改变 src,保持页面上不变 */}
+            <img
+              ref={imgRef}
+              data-testid="p-viewer-ppt-image"
+              src={imageUrls[current - 1]}
+              alt={`${material.name} 第 ${current} 页`}
+              onContextMenu={(e) => e.preventDefault()}
+              className="max-w-full max-h-[80vh] bg-white shadow-2xl object-contain select-none"
+              draggable={false}
+            />
+            {/* 预加载图:隐藏的 <img>,用于后台下载下一页;加载完成后才 setCurrent */}
+            {pendingPage != null && (
+              <img
+                data-testid="p-viewer-ppt-preload"
+                src={imageUrls[pendingPage - 1]}
+                alt=""
+                onLoad={handlePendingLoad}
+                onError={handlePendingError}
+                className="hidden"
+                aria-hidden
+              />
+            )}
+          </>
         )}
-        {!error && (
-          <img
-            ref={imgRef}
-            data-testid="p-viewer-ppt-image"
-            src={imageUrls[current - 1]}
-            alt={`${material.name} 第 ${current} 页`}
-            onLoad={handleImgLoad}
-            onError={handleImgError}
-            onContextMenu={(e) => e.preventDefault()}
-            className="max-w-full max-h-[80vh] bg-white shadow-2xl transition-opacity duration-200 object-contain select-none"
-            style={{ opacity: transitioning ? 0 : 1 }}
-            draggable={false}
-          />
+        {/* 加载提示用 absolute 浮层,不占 flex 布局空间,避免中间状态右偏移 */}
+        {pendingPage != null && !error && (
+          <div
+            data-testid="p-viewer-ppt-loading"
+            className="absolute inset-x-0 bottom-6 flex justify-center pointer-events-none z-20"
+            aria-live="polite"
+          >
+            <span className="bg-slate-800/85 text-slate-100 px-3 py-1.5 rounded-full shadow-lg text-xs flex items-center gap-2">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary-300 animate-pulse" />
+              正在加载幻灯片…
+            </span>
+          </div>
         )}
       </div>
 

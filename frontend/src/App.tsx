@@ -24,6 +24,7 @@ import { CategoriesPage } from "@/pages/admin/Categories";
 import { TagsPage } from "@/pages/admin/Tags";
 import { MaterialsPage } from "@/pages/admin/Materials";
 import { AccessTokensPage } from "@/pages/admin/AccessTokens";
+import { AccessTokenUsagePage } from "@/pages/admin/AccessTokenUsage";
 import { CoursewaresPage } from "@/pages/admin/Coursewares";
 import { AdminLayout } from "@/layouts/AdminLayout";
 
@@ -87,6 +88,10 @@ export default function App() {
           <Route path="/admin/tags" element={<TagsPage />} />
           <Route path="/admin/materials" element={<MaterialsPage />} />
           <Route path="/admin/access-tokens" element={<AccessTokensPage />} />
+          <Route
+            path="/admin/access-tokens/:id/usage"
+            element={<AccessTokenUsagePage />}
+          />
           <Route path="/admin/coursewares" element={<CoursewaresPage />} />
           <Route
             path="/admin/coursewares/new"

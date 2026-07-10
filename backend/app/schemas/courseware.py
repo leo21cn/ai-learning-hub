@@ -14,6 +14,9 @@ class CoursewareMaterialBrief(BaseModel):
     duration: Optional[str] = None
     downloadUrl: str
     streamUrl: str = ""
+    # 该素材在课件内的展示顺序，由管理员拖拽写入；
+    # 同课件内 0..N-1 连续递增，前台详情页与 P-VIEWER 按此顺序渲染。
+    sortOrder: int = 0
 
 
 class CoursewareBase(BaseModel):
@@ -94,6 +97,16 @@ class UnlockResponse(BaseModel):
     coursewareIds: List[int]
 
 
+class CoursewareMaterialsReorderRequest(BaseModel):
+    """专用排序接口请求体：materialIds 按目标顺序传入。
+
+    服务端按数组下标重写 courseware_material.sort_order（0..N-1），
+    并校验：①课件存在 ②全部 ID 属于该课件 ③数量一致 ④无重复。
+    """
+
+    materialIds: List[int] = Field(..., min_length=1)
+
+
 __all__ = [
     "CoursewareBase",
     "CoursewareCreateRequest",
@@ -103,4 +116,5 @@ __all__ = [
     "CoursewareMaterialBrief",
     "UnlockRequest",
     "UnlockResponse",
+    "CoursewareMaterialsReorderRequest",
 ]

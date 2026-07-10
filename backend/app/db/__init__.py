@@ -16,12 +16,13 @@ _settings = get_settings()
 # SQLite(如测试用)不支持 pool_size/max_overflow，仅 Postgres/MySQL 走连接池。
 # SQLite 内存还需要 check_same_thread=False 以允许 TestClient 在多线程下访问。
 _engine_kwargs: dict = {"pool_pre_ping": True, "echo": False}
-if _settings.database_url.startswith("sqlite"):
+_db_url = _settings.effective_database_url
+if _db_url.startswith("sqlite"):
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
     _engine_kwargs["poolclass"] = StaticPool
 else:
     _engine_kwargs.update(pool_size=10, max_overflow=20)
-engine = create_engine(_settings.database_url, **_engine_kwargs)
+engine = create_engine(_db_url, **_engine_kwargs)
 
 SessionLocal = sessionmaker(
     bind=engine,

@@ -5,6 +5,7 @@ COPY package.json package-lock.json* ./
 # npm ci 需要 lock 文件;若没有则用 npm install
 RUN npm install --no-audit --no-fund --prefer-offline
 COPY tsconfig.json vite.config.ts tailwind.config.js postcss.config.js index.html ./
+COPY public ./public
 COPY scripts ./scripts
 COPY src ./src
 RUN npm run build && \

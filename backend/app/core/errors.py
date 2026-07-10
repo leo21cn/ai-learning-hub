@@ -27,6 +27,7 @@ class ErrorCode:
     COURSEWARE_ACL_LOCKED = "courseware_acl_locked"
     COURSEWARE_HAS_MATERIALS = "courseware_has_materials"
     COURSEWARE_PUBLISH_CONFLICT = "courseware_publish_conflict"
+    COURSEWARE_MATERIALS_INVALID = "courseware_materials_invalid"
 
     # 分类
     CATEGORY_NOT_FOUND = "category_not_found"
@@ -87,6 +88,7 @@ _HTTP_BY_CODE: Dict[str, int] = {
     ErrorCode.COURSEWARE_ACL_LOCKED: 403,
     ErrorCode.COURSEWARE_HAS_MATERIALS: 422,
     ErrorCode.COURSEWARE_PUBLISH_CONFLICT: 409,
+    ErrorCode.COURSEWARE_MATERIALS_INVALID: 400,
     # 分类
     ErrorCode.CATEGORY_NOT_FOUND: 404,
     ErrorCode.CATEGORY_NAME_REQUIRED: 400,

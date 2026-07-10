@@ -2,7 +2,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,10 +22,23 @@ class Settings(BaseSettings):
     database_user: str = Field(default="lh")
     database_password: str = Field(default="lh")
     database_name: str = Field(default="learning_hub")
-    database_url: str = Field(default="postgresql+psycopg2://lh:lh@postgres:5432/learning_hub")
+    # 整体连接串优先,留空时自动由各个独立字段拼出。
+    database_url: str = Field(default="")
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def effective_database_url(self) -> str:
+        """优先返回 DATABASE_URL 环境变量(供临时覆盖/切换数据库用);
+        否则从独立字段拼出 postgresql+psycopg2://<user>:<pwd>@<host>:<port>/<db>。"""
+        if self.database_url:
+            return self.database_url
+        return (
+            f"postgresql+psycopg2://{self.database_user}:{self.database_password}"
+            f"@{self.database_host}:{self.database_port}/{self.database_name}"
+        )
 
     # ===== Admin =====
-    admin_token: str = Field(default="demo")
+    admin_token: str = Field(default="shleeyuan")
 
     # ===== JWT =====
     jwt_secret: str = Field(default="please-change-me-in-production-32chars-min-length-xxxx")

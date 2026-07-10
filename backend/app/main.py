@@ -14,11 +14,13 @@ from app import __version__
 from app.api import auth as api_auth
 from app.api.admin import (
     access_tokens,
+    access_token_usage,
     categories,
     coursewares,
     materials,
     tags,
 )
+from app.api.public import access_sessions as public_access_sessions
 from app.api.public import coursewares as public_coursewares
 from app.api.public import health as public_health
 from app.api.public import materials as public_materials
@@ -90,12 +92,14 @@ def create_app() -> FastAPI:
     app.include_router(public_health.router)
     app.include_router(public_coursewares.router)
     app.include_router(public_materials.router)
+    app.include_router(public_access_sessions.router)
     app.include_router(api_auth.router)
     app.include_router(categories.router)
     app.include_router(tags.router)
     app.include_router(materials.router)
     app.include_router(coursewares.router)
     app.include_router(access_tokens.router)
+    app.include_router(access_token_usage.router)
 
     @app.get("/")
     def root():  # type: ignore[no-untyped-def]

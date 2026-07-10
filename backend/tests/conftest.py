@@ -1,18 +1,27 @@
 """pytest 全局 fixtures:为后端测试提供内存数据库与 FastAPI 客户端。"""
 from __future__ import annotations
 
+import builtins
 import os
 from collections.abc import Generator
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+# 修复 Windows 上 slowapi/starlette 默认 open() 使用 GBK 编码读 .env 失败:
+# 强制在测试环境用 utf-8 打开文本文件。此修改仅作用于 pytest 进程。
+_orig_open = builtins.open
+def _patched_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+    if "b" not in mode and "encoding" not in kwargs:
+        kwargs["encoding"] = "utf-8"
+    return _orig_open(file, mode, *args, **kwargs)
+builtins.open = _patched_open
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 # 测试环境:必须在 import app.* 之前覆盖 DATABASE_URL
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
-os.environ.setdefault("ADMIN_TOKEN", "demo")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-32-chars-min-for-tests-1234")
 
 from app.core.config import get_settings  # noqa: E402
@@ -23,6 +32,11 @@ from app.models import *  # noqa: E402,F401,F403  # 注册所有模型
 # 强制使用 SQLite 内存(覆盖容器里的 postgres URL)
 _settings = get_settings()
 _settings.database_url = "sqlite:///:memory:"  # type: ignore[attr-defined]
+
+# 测试用 admin token:与现有测试用例保持一致(用 "demo")
+# 注意:这里覆盖 settings.admin_token 以让 admin_login 等历史 fixture 走通。
+ADMIN_TOKEN_TEST = "demo"
+_settings.admin_token = ADMIN_TOKEN_TEST  # type: ignore[attr-defined]
 
 _test_engine = create_engine(
     "sqlite:///:memory:",
@@ -46,6 +60,11 @@ app.dependency_overrides[get_db] = _override_db
 @pytest.fixture(autouse=True)
 def _init_schema() -> Generator[None, None, None]:
     Base.metadata.create_all(_test_engine)
+    # 重置 access-sessions 限流桶(模块级全局 dict,跨测试累积)
+    from app.api.public import access_sessions as _as
+    with _as._rate_lock:
+        for b in _as._rate_buckets.values():
+            b.clear()
     yield
     Base.metadata.drop_all(_test_engine)
 
@@ -59,7 +78,7 @@ def client() -> Generator[TestClient, None, None]:
 @pytest.fixture
 def admin_login(client: TestClient) -> None:
     """对需要鉴权的接口,先登录后台管理员。"""
-    r = client.post("/api/auth/admin", json={"token": "demo"})
+    r = client.post("/api/auth/admin", json={"token": ADMIN_TOKEN_TEST})
     assert r.status_code == 200, r.text
     # Cookie 由 TestClient 自动保持
 
@@ -93,7 +112,7 @@ def courseware_payload(admin_login):
 
 
 def login_admin(client: TestClient) -> None:
-    r = client.post("/api/auth/admin", json={"token": "demo"})
+    r = client.post("/api/auth/admin", json={"token": ADMIN_TOKEN_TEST})
     assert r.status_code == 200, r.text
     # Cookie 由 TestClient 自动保持
 

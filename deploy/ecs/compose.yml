@@ -1,0 +1,78 @@
+# ===== Learning Hub ECS Docker Stack (Swarm v3.8) =====
+#
+# 由 publish.ps1 推到 ECS 后,在 ECS 上以 `docker stack deploy -c compose.yml learning-hub` 部署。
+#
+# 复用的两个外部 overlay 网络(必须已在 ECS 上存在;publish.ps1 不重建):
+#   - POSTGRES_NETWORK_NAME:postgres stack 服务所在,backend 接入后通过 ${POSTGRES_SERVICE_NAME} 解析到 pg。
+#   - NGINX_NETWORK_NAME   :nginx-gateway 容器所在,frontend 接入后被上游 vhost 解析到。
+#
+# 复用的一个 named volume:
+#   - lh_storage           :素材文件持久化(/app/storage)。
+
+version: "3.8"
+
+networks:
+  postgres_net:
+    external: true
+    name: ${POSTGRES_NETWORK_NAME}
+  nginx_net:
+    external: true
+    name: ${NGINX_NETWORK_NAME}
+
+volumes:
+  lh_storage:
+    external: true
+    name: lh_storage
+
+services:
+  backend:
+    image: lh-backend:${IMAGE_TAG}
+    env_file: .env
+    environment:
+      # env_file 已注入主要字段;这里显式补全 POSTGRES_NETWORK_NAME / NGINX_NETWORK_NAME,
+      # 避免 .env 中忘记填写时 backend 拿不到值而连不上数据库。
+      DATABASE_HOST: ${POSTGRES_SERVICE_NAME}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      TZ: Asia/Shanghai
+    networks:
+      - default
+      - postgres_net
+    volumes:
+      - lh_storage:/app/storage
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      placement:
+        constraints:
+          - node.role == manager
+    # backend.Dockerfile 内置 HEALTHCHECK(/api/public/health);compose 不重复声明。
+
+  frontend:
+    image: lh-frontend:${IMAGE_TAG}
+    # frontend nginx.conf 的 proxy_pass 写的是 http://learning-hub_backend:8000,
+    # 由 docker swarm 同 stack service DNS 解析。如果未来 nginx 改回 `backend`,
+    # 可在 entrypoint.sh 里加 `echo 127.0.0.1 learning-hub_backend >> /etc/hosts` 兜底,
+    # 但 swarm v3.8 的 `extra_hosts` 不支持 hostname(只能 IP),所以不在这里写。
+    networks:
+      - default
+      - nginx_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      placement:
+        constraints:
+          - node.role == manager
+    # frontend 容器内 nginx.conf 已自带 /api/ 反代到 backend service
+    # (同 stack 内由 swarm DNS 解析为 `backend`),无需在 compose 层再加任何配置。
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

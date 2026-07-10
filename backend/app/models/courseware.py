@@ -57,6 +57,7 @@ class Courseware(Base):
         secondary="courseware_material",
         backref="coursewares",
         lazy="selectin",
+        order_by="courseware_material.c.sort_order",
     )
     access_tokens: Mapped[List["AccessToken"]] = relationship(  # noqa: F821
         "AccessToken",

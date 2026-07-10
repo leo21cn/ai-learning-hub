@@ -582,7 +582,33 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 { "code": "ok", "message": "ok", "data": { "id": 42, "deleted": true }, "requestId": "req-..." }
 ```
 
-#### 4.1.6 列表筛选特别说明
+#### 4.1.6 `PUT /api/admin/coursewares/{id}/materials/order` · v1.5+
+
+专用素材顺序重排接口；按 `materialIds` 数组下标重写 `courseware_material.sort_order`（0..N-1）。
+
+- **语义**：仅修改顺序，不增删素材。
+- **校验**：① 课件存在；② `materialIds` 数量与当前一致；③ 全部 ID 属于该课件；④ 无重复。任一失败 → 400 `courseware_materials_invalid`。
+- **与 PUT §4.1.4 的区别**：PUT 走"集合替换"语义（新素材追加末尾，旧素材保留原 `sortOrder`），不重写 `sortOrder`；本接口是**唯一**会按数组下标重写 `sortOrder` 的入口。
+
+**请求体**
+
+```json
+{ "materialIds": [12, 7, 33, 5] }
+```
+
+**响应 `200 OK`**
+
+与 `GET /api/admin/coursewares/{id}` 响应一致（CoursewareItem 完整结构）。
+
+**错误码**
+
+| HTTP | code | 触发条件 |
+| ---- | ---- | -------- |
+| 400 | `courseware_materials_invalid` | 数量与当前不匹配 / 包含未绑定到该课件的 ID / 出现重复 |
+| 404 | `courseware_not_found` | 课件不存在 |
+| 401 | — | 未登录或 token 失效 |
+
+#### 4.1.7 列表筛选特别说明
 
 | 过滤参数 | 行为 |
 | -------- | ---- |
@@ -1105,6 +1131,7 @@ LLM 输出 SQL 字符串必须依次通过 [backend/app/services/_sql_safety.py]
 | `duration` | string \| null | 视频为时长（如 `12:34`），PDF/PPT 为页数或 `null` |
 | `downloadUrl` | string | `GET /api/public/materials/{id}/file`，以 `attachment` 下发 |
 | `streamUrl` | string | `GET /api/public/materials/{id}/stream`，以 `inline` 下发（详见 [§5.2.4](#524-公开素材流式接口)） |
+| `sortOrder` | int | v1.5+ 该素材在课件内的展示顺序（0..N-1）；客户端应以 `materials[]` 数组顺序作为权威，sortOrder 仅作字段冗余便于调试 |
 
 #### 5.2.3 公开素材单条接口
 
@@ -1395,7 +1422,101 @@ curl -X POST http://localhost/api/auth/logout \
 | 1.0 | 2026-07-06 | 首次发布:覆盖 Admin Token 鉴权、5 大模块后台 CRUD、AI 搜索、课件详情 / 解锁、统一错误码体系 |
 | 1.1 | 2026-07-06 | **技术栈调整**:后端由 Java/Spring Boot 转为 Python 3.11+/FastAPI;前端由 Vue 3 转为 React 18 + Vite + TS;鉴权由 `JwtAuthFilter` 重命名为 `AdminAuthMiddleware`(模块 `app.lh.middleware.admin_auth`);限流由 Spring 体系转为 SlowAPI;字段命名由 camelCase 调整为 snake_case(保留 alias 兼容) |
 | 1.2 | 2026-07-07 | **素材在线浏览**:新增 `/api/public/materials/{id}` 单条接口、`/api/public/materials/{id}/stream` 流式接口；`materials[]` 元素补充 `streamUrl` / `downloadUrl` / `sizeBytes`；PPT 后端自动转 PDF(字段 `Material.preview_pdf_path`)；P-VIEWER 预览页使用，见 [03 §5a](./03-前台门户规格.md) |
+| 1.5 | 2026-07-10 | **课件内素材顺序编辑**:新增 `PUT /api/admin/coursewares/{id}/materials/order` 专用排序接口；`materials[]` 元素新增 `sortOrder`(课件内 0..N-1)；新增错误码 `courseware_materials_invalid`(400)；详见 [05 §2.6](./05-数据模型.md)、[08 §15 AC-041~050](./08-验收标准.md) |
 
 ---
 
 > **本规格说明书 API 契约到此结束。** 任何与运行实例不一致之处，请提交修订并同步更新对应章节；同时回写本规范 [§7.4](#74-变更日志)。
+
+
+---
+
+## §5.4 访问会话 API(公共 + 管理) · v1.4
+
+### §5.4.1 公共 API(无需 admin 鉴权,凭 token hash)
+
+| 方法 | 路径 | 鉴权 | 描述 |
+| ---- | ---- | ---- | ---- |
+| POST | `/api/public/access-sessions` | `X-Token-Hash` 或 `lh_token_hash` cookie | 开一条 access_session(埋点) |
+| POST | `/api/public/access-sessions/{id}/leave` | 同上 | 结束一条 access_session;幂等 |
+
+**POST `/api/public/access-sessions` 请求**
+
+```json
+{ "materialId": 123 }
+```
+
+成功响应(`envelope.data`):
+
+```json
+{ "sessionId": 1024, "startedAt": "2026-07-10T08:30:11+00:00", "recorded": true }
+```
+
+行为:
+- 缺 `X-Token-Hash` / cookie → 400 `missing_token`
+- `token_hash` 无效 → 401 `invalid_token`
+- 素材仅出现在 OPEN 课件中 → 200 `recorded=false`(不写库,B-1)
+- 素材被 RESTRICTED 课件引用但 token 未授权 → 403 `courseware_acl_locked`
+- 写入失败 → 200 `recorded=false`(吞错,不阻塞前台,B-1 友好变体)
+
+**POST `/api/public/access-sessions/{id}/leave` 请求**
+
+```json
+{ "durationSeconds": 73 }
+```
+
+成功响应: `{ "ok": true }`。幂等(不存在视为 `ok=true`)。B-2:客户端上报偏差 > 60s 时按服务端时间校正。
+
+### §5.4.2 管理 API(`/api/admin/access-tokens/{id}/access-sessions*`)
+
+| 方法 | 路径 | 描述 |
+| ---- | ---- | ---- |
+| GET | `/api/admin/access-tokens/{id}/access-sessions` | 某 token 在时间段内的访问台账(分页 + 概览) |
+| GET | `/api/admin/access-tokens/{id}/access-sessions/material-summary` | 按素材聚合(本期重点) |
+
+**通用查询参数**: `start`(必填,YYYY-MM-DD), `end`(必填), `materialId?`, `coursewareId?`, `page?`/`size?`(默认 1/20)
+
+**GET `/access-sessions` 响应**:
+
+```json
+{
+  "page": 1, "size": 20, "total": 134,
+  "summary": {
+    "totalDurationSeconds": 9123,
+    "sessionCount": 134,
+    "coursewareCount": 7,
+    "materialCount": 22
+  },
+  "items": [
+    {
+      "id": 1024, "startedAt": "...", "endedAt": "...",
+      "durationSeconds": 73, "clientLeave": true,
+      "coursewareId": 12, "coursewareTitle": "...",
+      "materialId": 88, "materialName": "...", "materialType": "PDF",
+      "ip": "10.0.0.1", "ua": "Mozilla/5.0 ..."
+    }
+  ]
+}
+```
+
+**GET `/access-sessions/material-summary` 响应**(按 `totalDurationSeconds DESC`):
+
+```json
+{
+  "start": "2026-07-01", "end": "2026-07-10",
+  "items": [
+    {
+      "materialId": 88, "materialName": "...", "materialType": "PDF",
+      "coursewareId": 12, "coursewareTitle": "...",
+      "totalDurationSeconds": 4820, "viewCount": 21,
+      "lastViewedAt": "2026-07-10T08:30:11+00:00"
+    }
+  ]
+}
+```
+
+## §7.4 修订记录(增量)
+
+| 版本 | 日期 | 变更摘要 |
+| ---- | ---- | -------- |
+| 1.4 | 2026-07-10 | **访问记录(Access Token Usage)**:在管理后台为每个访问令牌追加「访问记录」入口与 P-VIEWER 访问台账<br>· 新增 `access_session` 表(详见 [05 §7](./05-数据模型.md))及 alembic 迁移 `c1d2e3f4a5b6_add_access_session`<br>· 新增公共 API `POST /api/public/access-sessions`(start/leave)与 `POST /api/public/access-sessions/{id}/leave`;行为见 §5.4.1<br>· 新增管理 API `GET /api/admin/access-tokens/{id}/access-sessions` 与 `/material-summary`;见 §5.4.2<br>· 前端 `AccessTokens.tsx` 列表行操作区追加「访问记录」链接(路由 `/admin/access-tokens/:id/usage`),新建 `AccessTokenUsage.tsx` 页面;P-VIEWER 集成 start/leave 埋点(sendBeacon → keepalive 兜底)<br>· 关键 B-1(仅 RESTRICTED 落库)、B-2(duration 偏差 > 60s 按服务端校正)、B-3(regenerate 不影响历史)业务规则<br>· 验证:`backend/tests/test_access_session.py` 13 个用例全绿;`frontend/e2e/admin-access-session.spec.ts` 5 个用例待部署后跑通<br>· 文档同步:04 §11 / 05 §7 / 08 §14 / 10 §5.4;README 修订表新增 v1.4 条目 |

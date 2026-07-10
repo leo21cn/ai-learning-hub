@@ -19,9 +19,11 @@ export async function getPdfjsLib(): Promise<typeof pdfjsLib> {
   if (!configured) {
     // 生产：固定路径 /pdf.worker.min.mjs（由 vite 插件或 Dockerfile 复制到 dist 根）
     // 开发：使用 vite dev server 动态 URL
-    pdfjsLib.GlobalWorkerOptions.workerSrc = import.meta.env.PROD
+    // 末尾加 ?v=20260709 强制 cache-bust——修复后 504 OK 之前可能缓存了 404，浏览器不一定主动重试
+    const workerBase = import.meta.env.PROD
       ? "/pdf.worker.min.mjs"
       : (devWorkerUrl as string);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `${workerBase}?v=20260709`;
     configured = true;
   }
   return pdfjsLib;

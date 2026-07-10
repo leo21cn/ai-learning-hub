@@ -12,7 +12,7 @@ const unwrap = <T>(p: Promise<{ data: T }>): Promise<T> => p.then((r) => r.data)
  *   写 Set-Cookie 的时序与下一次 GET 请求之间存在窗口期。若 P-DETAIL 的
  *   fetch 紧跟 unlock.then，浏览器可能还没把 cookie 写入 CookieJar，导致
  *   后端读不到 lh_token_hash，返 403，前端跳回 P-LOCKED——表现为
- *   “输入令牌两次才能打开课件页面”。
+ *   "输入令牌两次才能打开课件页面"。
  * - 直接从 useTokenStore 拿 tokenHash(由 Locked.unlock 同步写入)，
  *   作为 X-Token-Hash 头传入，与 Set-Cookie 完全解耦。
  */
@@ -96,7 +96,17 @@ export const MaterialAPI = {
       apiClient.post<{ id: number; name: string; type: string; sizeBytes: number }>(
         "/admin/materials",
         fd,
-        { headers: { "Content-Type": "multipart/form-data" } },
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+          // 大文件上传(5–10Mbps 家用网络上 200MB 需 150–300s);
+          // 单次请求覆盖默认 30s 客户端超时,与后端/nginx 600s 对齐,剩余 5 分钟冗余。
+          timeout: 15 * 60 * 1000,
+          onUploadProgress: (evt) => {
+            if (!evt.total) return;
+            // 可在此处将进度冒泡给上层组件用于 UI 展示
+            void evt;
+          },
+        },
       ),
     );
   },
@@ -143,6 +153,150 @@ export const AccessTokenAPI = {
     unwrap(apiClient.delete(`/admin/access-tokens/${id}`)),
 };
 
+// ===== Access Sessions (P-VIEWER 埋点) =====
+export type AccessSessionStartResponse = {
+  sessionId: number | null;
+  startedAt: string | null;
+  recorded: boolean;
+};
+
+/** 公共 API:开始一个 P-VIEWER 访问会话(无需 admin 鉴权)。
+ *
+ * 由 P-VIEWER 在素材加载成功后调用;后端按 B-1 自动跳过 OPEN 课件。
+ * 失败/未记录 → recorded=false,前端不感知,继续浏览。
+ */
+export const AccessSessionAPI = {
+  start: (params: { materialId: number; coursewareId: number | null }) => {
+    const headers = tokenHashHeaders(params.coursewareId);
+    return unwrap(
+      apiClient.post<AccessSessionStartResponse>(
+        "/public/access-sessions",
+        { materialId: params.materialId },
+        { headers },
+      ),
+    ).catch(() => ({ sessionId: null, startedAt: null, recorded: false }));
+  },
+  /** 离开 P-VIEWER 时调用,best-effort 失败不抛。
+   *  优先 sendBeacon(切页/关页时最可靠),回退 fetch keepalive。
+   */
+  leave: (params: {
+    sessionId: number;
+    coursewareId: number | null;
+    durationSeconds: number;
+  }) => {
+    const body = JSON.stringify({ durationSeconds: params.durationSeconds });
+    const hash = params.coursewareId
+      ? useTokenStore.getState().unlockedByCourseware[params.coursewareId] || ""
+      : "";
+    // 1) 优先 navigator.sendBeacon
+    try {
+      if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+        const url = `/api/public/access-sessions/${params.sessionId}/leave?X-Token-Hash=${encodeURIComponent(hash)}`;
+        const blob = new Blob([body], { type: "application/json" });
+        const ok = navigator.sendBeacon(url, blob);
+        if (ok) return Promise.resolve({ ok: true });
+      }
+    } catch {
+      // 退化
+    }
+    // 2) 回退 fetch keepalive
+    return apiClient
+      .post(
+        `/public/access-sessions/${params.sessionId}/leave`,
+        { durationSeconds: params.durationSeconds },
+        {
+          headers: tokenHashHeaders(params.coursewareId),
+          // @ts-expect-error: keepalive 不是 axios 类型但浏览器 fetch 支持
+          keepalive: true,
+        },
+      )
+      .then(() => ({ ok: true }))
+      .catch(() => ({ ok: false }));
+  },
+};
+
+// ===== Access Token Usage (管理 API) =====
+export type AccessSessionItem = {
+  id: number;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  clientLeave: boolean;
+  coursewareId: number;
+  coursewareTitle: string;
+  materialId: number;
+  materialName: string;
+  materialType: string;
+  ip: string | null;
+  ua: string | null;
+};
+export type AccessSessionSummary = {
+  totalDurationSeconds: number;
+  sessionCount: number;
+  coursewareCount: number;
+  materialCount: number;
+};
+export type AccessSessionPaged = {
+  page: number;
+  size: number;
+  total: number;
+  summary: AccessSessionSummary;
+  items: AccessSessionItem[];
+};
+export type MaterialUsageItem = {
+  materialId: number;
+  materialName: string;
+  materialType: string;
+  coursewareId: number;
+  coursewareTitle: string;
+  totalDurationSeconds: number;
+  viewCount: number;
+  lastViewedAt: string | null;
+};
+export type MaterialUsagePaged = {
+  start: string;
+  end: string;
+  items: MaterialUsageItem[];
+};
+
+export const AccessTokenUsageAPI = {
+  list: (
+    id: number,
+    params: {
+      start: string;
+      end: string;
+      materialId?: number;
+      coursewareId?: number;
+      page?: number;
+      size?: number;
+    },
+  ) =>
+    unwrap(
+      apiClient.get<AccessSessionPaged>(
+        `/admin/access-tokens/${id}/access-sessions`,
+        { params },
+      ),
+    ),
+  materialSummary: (
+    id: number,
+    params: { start: string; end: string },
+  ) =>
+    unwrap(
+      apiClient.get<MaterialUsagePaged>(
+        `/admin/access-tokens/${id}/access-sessions/material-summary`,
+        { params },
+      ),
+    ),
+  /** 首屏概览:4 项聚合指标(总停留 / 次数 / 课件数 / 素材数),不含 items。 */
+  summary: (id: number, params: { start: string; end: string }) =>
+    unwrap(
+      apiClient.get<AccessSessionSummary>(
+        `/admin/access-tokens/${id}/access-sessions/summary`,
+        { params },
+      ),
+    ),
+};
+
 // ===== Coursewares =====
 export type CoursewareMaterialBrief = {
   id: number;
@@ -154,6 +308,8 @@ export type CoursewareMaterialBrief = {
    *  本字段声明为可选以便后续剥离时类型仍合法。 */
   downloadUrl?: string;
   streamUrl: string;
+  /** 该素材在课件内的展示顺序（v1.5+）。同课件内 0..N-1 连续递增。 */
+  sortOrder: number;
 };
 
 /** 公开素材单条查询返回结构（P-VIEWER 使用）。 */
@@ -184,6 +340,7 @@ export type CoursewareItem = {
   accessMode: "OPEN" | "RESTRICTED";
   tagIds: number[];
   tagNames: string[];
+  /** v1.5+：materialIds 与 materials 已按 sortOrder 升序返回（admin 设定顺序）。 */
   materialIds: number[];
   tokenIds: number[];
   createdAt: string | null;
@@ -232,6 +389,14 @@ export const CoursewareAPI = {
       tokenIds: number[];
     }>,
   ) => unwrap(apiClient.put<CoursewareItem>(`/admin/coursewares/${id}`, payload)),
+  /** v1.5+：专用排序接口。按 materialIds 数组顺序重写 sortOrder（0..N-1）。 */
+  reorderMaterials: (coursewareId: number, materialIds: number[]) =>
+    unwrap(
+      apiClient.put<CoursewareItem>(
+        `/admin/coursewares/${coursewareId}/materials/order`,
+        { materialIds },
+      ),
+    ),
   remove: (id: number) =>
     unwrap(apiClient.delete(`/admin/coursewares/${id}`)),
 };

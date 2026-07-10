@@ -34,15 +34,16 @@ from app.services.material import _storage_root
 
 def main() -> None:
     s = get_settings()
-    print(f"[dev-seed] DATABASE_URL={s.database_url}")
-    if s.database_url.startswith("sqlite"):
+    _url = s.effective_database_url
+    print(f"[dev-seed] DATABASE_URL={_url}")
+    if _url.startswith("sqlite"):
         engine = create_engine(
-            s.database_url,
+            _url,
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
     else:
-        engine = create_engine(s.database_url)
+        engine = create_engine(_url)
 
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = Session()
@@ -183,6 +184,18 @@ def main() -> None:
         cw2.materials = [mat_video, mat_ppt]
         cw2.access_tokens = [tok]
         db.add(cw2)
+        db.flush()
+        # v1.5+: 显式写入素材顺序(seed 演示按学习路径排序)。
+        # video (sort_order=0) → ppt (sort_order=1)
+        for idx, m in enumerate([mat_video, mat_ppt]):
+            db.execute(
+                courseware_material.update()
+                .where(
+                    (courseware_material.c.courseware_id == cw2.id)
+                    & (courseware_material.c.material_id == m.id)
+                )
+                .values(sort_order=idx)
+            )
         db.flush()
 
         db.commit()

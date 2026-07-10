@@ -13,15 +13,16 @@ from app.db import Base
 
 def main() -> None:
     s = get_settings()
-    print(f"[dev-init] DATABASE_URL={s.database_url}")
-    if s.database_url.startswith("sqlite"):
+    _url = s.effective_database_url
+    print(f"[dev-init] DATABASE_URL={_url}")
+    if _url.startswith("sqlite"):
         engine = create_engine(
-            s.database_url,
+            _url,
             connect_args={"check_same_thread": False},
             poolclass=StaticPool,
         )
     else:
-        engine = create_engine(s.database_url)
+        engine = create_engine(_url)
 
     # 注册所有模型（显式导入，避免函数内通配符导入的 lint 限制）
     from app.models.access_token import AccessToken  # noqa: F401

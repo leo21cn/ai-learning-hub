@@ -206,9 +206,74 @@ ECS 远程验证阶段追加：
 
 ---
 
-## 8. 修订记录
+## 8. 课件内素材顺序编辑（v1.5）部署注意事项
+
+> 对应规格 v1.5：管理员可在课件表单内通过拖拽调整素材顺序，前台按该顺序展示。本节为 v1.5 发布的部署要点与回滚预案。
+
+### 8.1 数据库迁移（必须）
+
+- v1.5 引入新迁移 `d2e3f4a5b6c7_add_courseware_material_sort_order`（`backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py`）。
+- 后端容器启动时 `entrypoint.sh` 自动 `alembic upgrade head`（见 [backend/entrypoint.sh](../../backend/entrypoint.sh)），新版本首次启动即应用迁移并回填既有课件的 `sort_order`。
+- 迁移内容（PostgreSQL）：
+  1. `ALTER TABLE courseware_material ADD COLUMN sort_order INTEGER`（nullable=True）
+  2. 回填：`UPDATE ... SET sort_order = sub.rn - 1 FROM (SELECT courseware_id, material_id, ROW_NUMBER() OVER (PARTITION BY courseware_id ORDER BY material_id) AS rn FROM courseware_material) sub WHERE ...`（按 material_id 升序回填 0..N-1）
+  3. `ALTER TABLE courseware_material ALTER COLUMN sort_order SET NOT NULL DEFAULT 0`
+  4. `CREATE INDEX ix_courseware_material_courseware_order ON courseware_material (courseware_id, sort_order)`
+- 旧镜像如果仍然连接已升级的 DB，会因代码侧 schema 期待 `sort_order` 而抛 500；务必先升镜像再迁数据（实际 entrypoint.sh 同进程内串行执行，发布脚本同步替换两镜像即满足此约束）。
+
+### 8.2 前端依赖
+
+- v1.5 新增依赖 `@dnd-kit/core ^6.3.1` / `@dnd-kit/sortable ^8.0.0` / `@dnd-kit/utilities ^3.2.2`（[frontend/package.json](../../frontend/package.json)）。
+- 本地构建前需 `npm ci` 同步 lockfile；CI 发布镜像时 publish.ps1 已带 `npm ci` 步骤。
+- 验证：构建后 `frontend/dist` 体积约 +50KB（gzip 约 +20KB）；不引入额外系统级依赖。
+
+### 8.3 部署顺序
+
+1. 确认 `git` 主干已包含本节对应的代码与迁移文件。
+2. 本地 `pytest tests/test_courseware_material_order.py` 全绿（AC-041~050）。
+3. 本地 `cd frontend && npm ci && npm run typecheck && npm run build` 无 TS / 构建错误。
+4. ECS 上使用 `deploy/ecs/publish.ps1 -SkipNginx` 推送新镜像；publish.ps1 已包含 `alembic upgrade head`。
+5. 验证迁移已应用：
+   ```bash
+   docker exec $(docker ps -q -f name=learning-hub_backend.1 | head -1) alembic current
+   # 期望输出包含 d2e3f4a5b6c7 (head)
+   ```
+6. 验证新端点已被加载（不鉴权应 401）：
+   ```bash
+   curl -i -X PUT https://learning-hub.smartmoves.com.cn/api/admin/coursewares/1/materials/order \
+     -H "Content-Type: application/json" \
+     -d '{"materialIds":[1]}'
+   # 期望：HTTP/1.1 401 (admin_principal 拦截)，不是 404
+   ```
+
+### 8.4 回滚预案
+
+- **完整回滚**（推荐，v1.5 涉及 schema 变更）：
+  ```bash
+  # SSH 到 ECS:
+  docker -H ssh://root@121.199.53.233 stack rm learning-hub
+  # 本地回退 IMAGE_TAG 后重新 publish：
+  cd D:\szp\work\learning-hub\deploy\ecs
+  .\publish.ps1 -SkipBuild -SkipNginx
+  ```
+- **仅数据库回滚**（应急止血，代码侧仍可能 500）：
+  ```bash
+  docker exec $(docker ps -q -f name=learning-hub_backend.1 | head -1) alembic downgrade -1
+  # 此时镜像仍为 v1.5：API 响应中 sortOrder 字段仍会返回，但 courseware_material.sort_order 列已不存在，
+  # 会抛 500。仅作为"前端不动、应用层先关排序功能"的应急处理。正式修复需重发旧版。
+  ```
+- **仅前端回滚**（保留后端 v1.5）：
+  ```bash
+  docker service update --image lh-frontend:<prev-tag> learning-hub_frontend
+  # 前端 v1.4 不识别 sortOrder 字段，但会忽略额外字段；功能降级为"无拖拽排序"。
+  ```
+
+---
+
+## 9. 修订记录
 
 | 版本 | 日期 | 变更 |
 | --- | --- | --- |
+| v0.3 | 2026-07-10 | 新增 §8 课件内素材顺序编辑（v1.5）部署注意事项：迁移说明（d2e3f4a5b6c7）/ 前端依赖 / 部署顺序 / 完整回滚 + 仅 DB / 仅前端回滚预案 |
 | v0.2 | 2026-07-07 | 新增 §7 素材预览依赖：LibreOffice 容器安装 + .env.example 配置 + 本地 brew/choco 安装路径 + `pdf.worker.min.mjs` nginx 静态资源 + 验证 checklist |
 | v0.1 | 2026-07-06 | 骨架版：记录 ECS / Swarm / Stack 名 / 域名 / 复用资源等关键信息；后续章节待补充 |

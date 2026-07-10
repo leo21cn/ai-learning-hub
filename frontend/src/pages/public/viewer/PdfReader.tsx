@@ -48,10 +48,23 @@ export function PdfReader({ material, onBack, onLogo }: Props) {
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
-        setError("PDF 加载失败，请检查网络后刷新重试");
-        setLoading(false);
+        const err = e as Error & { name?: string; message?: string };
+        // 上报详细错误到控制台,便于排查 worker 加载失败 vs PDF 本身损坏 vs 权限 403
         // eslint-disable-next-line no-console
-        console.error("[PdfReader] load failed", e);
+        console.error("[PdfReader] load failed", {
+          name: err?.name,
+          message: err?.message,
+          stack: err?.stack,
+          streamUrl: material.streamUrl,
+        });
+        const reason =
+          err?.name === "PasswordException"
+            ? "PDF 受密码保护"
+            : err?.message?.includes("401") || err?.message?.includes("403")
+              ? "未授权访问该素材"
+              : "PDF 加载失败，请检查网络后刷新重试";
+        setError(reason);
+        setLoading(false);
       }
     })();
     return () => {

@@ -97,7 +97,9 @@ def _resolve_materials(db: Session, material_ids: Optional[List[int]]) -> List[M
     if not material_ids:
         return []
     rows = db.execute(select(Material).where(Material.id.in_(material_ids))).scalars().all()
-    return list(rows)
+    # 保留请求方的传入顺序，便于新课件创建时能拿到客户端拖拽后的顺序
+    by_id = {m.id: m for m in rows}
+    return [by_id[mid] for mid in material_ids if mid in by_id]
 
 
 def create(
@@ -141,6 +143,20 @@ def create(
     obj.materials = mat_objs
     obj.access_tokens = tok_objs
     db.add(obj)
+    db.flush()  # 先让 courseware id 生成,后续 UPDATE 才能定位
+    # 显式写入 sort_order,避免依赖 ORM 二次同步导致全部为 0。
+    if mat_objs:
+        from app.models.association import courseware_material  # noqa: PLC0415
+
+        for idx, m in enumerate(mat_objs):
+            db.execute(
+                courseware_material.update()
+                .where(
+                    (courseware_material.c.courseware_id == obj.id)
+                    & (courseware_material.c.material_id == m.id)
+                )
+                .values(sort_order=idx)
+            )
     db.commit()
     db.refresh(obj)
     audit.write(
@@ -192,7 +208,39 @@ def update(
     if tag_ids is not None:
         obj.tags = _resolve_tags(db, tag_ids)
     if material_ids is not None:
-        obj.materials = _resolve_materials(db, material_ids)
+        # R-20: 集合替换语义——保留原 sortOrder,新素材追加到末尾。
+        # 直接用 SQL 操作 courseware_material 表,避免 ORM 二次同步
+        # secondary table 时按 new_materials 顺序覆写 sort_order 的副作用。
+        from app.models.association import courseware_material  # noqa: PLC0415
+    
+        old_materials = list(obj.materials or [])
+        old_index = {m.id: i for i, m in enumerate(old_materials)}
+        max_old = max(old_index.values()) if old_index else -1
+        target_set = set(int(mid) for mid in material_ids)
+        to_remove = [m.id for m in old_materials if m.id not in target_set]
+        to_add = sorted(target_set - set(old_index.keys()))
+        # DELETE 被移除的关联行
+        if to_remove:
+            db.execute(
+                courseware_material.delete().where(
+                    (courseware_material.c.courseware_id == obj.id)
+                    & (courseware_material.c.material_id.in_(to_remove))
+                )
+            )
+        # INSERT 新增的关联行(预留 sort_order=max_old+1..)
+        next_ord = max_old + 1
+        for mid in to_add:
+            db.execute(
+                courseware_material.insert().values(
+                    courseware_id=obj.id,
+                    material_id=mid,
+                    sort_order=next_ord,
+                )
+            )
+            next_ord += 1
+        db.flush()
+        # 过期 ORM 缓存,下次访问 obj.materials 时从 DB 重读
+        db.expire(obj, ["materials"])
     if token_ids is not None:
         if obj.access_mode == AccessMode.OPEN:
             # OPEN 模式忽略 token 绑定(防止误传)
@@ -224,7 +272,7 @@ def delete(db: Session, courseware_id: int) -> None:
 
 # ============ 列表 / 搜索 ============
 
-def _to_item(obj: Courseware, *, downloadable: bool = False) -> Dict[str, Any]:
+def _to_item(db: Session, obj: Courseware, *, downloadable: bool = False) -> Dict[str, Any]:
     item = {
         "id": obj.id,
         "title": obj.title,
@@ -241,6 +289,18 @@ def _to_item(obj: Courseware, *, downloadable: bool = False) -> Dict[str, Any]:
         "updatedAt": obj.updated_at.isoformat() if obj.updated_at else None,
     }
     if downloadable:
+        # 从关联表读取实际 sort_order,避免用 obj.materials 的下标代替
+        # (obj.materials 加载顺序仅在二次同步后才是 sortOrder 语义,
+        #  中间过程可能下标错位)。返回字典给 _to_item 使用。
+        from app.models.association import courseware_material  # noqa: PLC0415
+
+        so_rows = db.execute(
+            select(
+                courseware_material.c.material_id,
+                courseware_material.c.sort_order,
+            ).where(courseware_material.c.courseware_id == obj.id)
+        ).all()
+        sort_map = {row[0]: int(row[1]) for row in so_rows}
         item["materials"] = [
             {
                 "id": m.id,
@@ -250,10 +310,72 @@ def _to_item(obj: Courseware, *, downloadable: bool = False) -> Dict[str, Any]:
                 "duration": m.duration_or_pages,
                 "downloadUrl": f"/api/public/materials/{m.id}/file",
                 "streamUrl": f"/api/public/materials/{m.id}/stream",
+                "sortOrder": sort_map.get(m.id, 0),
             }
             for m in (obj.materials or [])
         ]
     return item
+
+
+def reorder_materials(
+    db: Session,
+    courseware_id: int,
+    material_ids: List[int],
+) -> Courseware:
+    """专用排序入口：按数组下标重写 courseware_material.sort_order（0..N-1）。
+
+    校验：
+    ① 课件存在（复用 get）；
+    ② 数量与当前一致；
+    ③ 全部 ID 属于该课件；
+    ④ 无重复。
+
+    任意校验失败抛 COURSEWARE_MATERIALS_INVALID。
+    """
+    obj = get(db, courseware_id)
+    current = list(obj.materials or [])
+    current_ids = [m.id for m in current]
+    current_set = set(current_ids)
+
+    # 重复
+    if len(set(material_ids)) != len(material_ids):
+        raise BusinessError(
+            ErrorCode.COURSEWARE_MATERIALS_INVALID,
+            "materialIds 包含重复 ID",
+        )
+    # 数量一致
+    if len(material_ids) != len(current_ids):
+        raise BusinessError(
+            ErrorCode.COURSEWARE_MATERIALS_INVALID,
+            "materialIds 数量与当前课件素材数不一致",
+        )
+    # 全部属于该课件
+    if set(material_ids) != current_set:
+        raise BusinessError(
+            ErrorCode.COURSEWARE_MATERIALS_INVALID,
+            "materialIds 包含未绑定到该课件的 ID",
+        )
+
+    # 重写 sort_order（按传入数组下标）
+    from app.models.association import courseware_material  # noqa: PLC0415
+
+    for idx, mid in enumerate(material_ids):
+        db.execute(
+            courseware_material.update()
+            .where(
+                (courseware_material.c.courseware_id == courseware_id)
+                & (courseware_material.c.material_id == mid)
+            )
+            .values(sort_order=idx)
+        )
+    db.commit()
+    db.refresh(obj)
+    audit.write(
+        "courseware.reorder_materials",
+        resource=f"courseware:{courseware_id}",
+        payload={"order": material_ids},
+    )
+    return obj
 
 
 def list_paged(
@@ -306,7 +428,7 @@ def list_paged(
         "page": page,
         "size": size,
         "total": int(total),
-        "items": [_to_item(o) for o in items],
+        "items": [_to_item(db, o) for o in items],
     }
 
 
@@ -338,7 +460,7 @@ def search_public(
             )
         )
     rows = db.execute(base.offset((page - 1) * size).limit(size)).scalars().all()
-    return [_to_item(o) for o in rows]
+    return [_to_item(db, o) for o in rows]
 
 
 __all__ = [
@@ -348,6 +470,7 @@ __all__ = [
     "get",
     "get_many",
     "list_paged",
+    "reorder_materials",
     "search_public",
     "_to_item",
 ]

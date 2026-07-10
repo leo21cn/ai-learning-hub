@@ -1,0 +1,11 @@
+# learning-hub smartmoves vhost (HTTP-only phase)
+# used by nginx-vhost-apply.sh -phase 1 (before cert is issued)
+# Insert before the last '}' of http{} block in /root/nginx-smartmoves/nginx.conf.
+
+# --- learning-hub.smartmoves.com.cn HTTP -> HTTPS redirect ---
+server {
+    listen 80;
+    server_name learning-hub.smartmoves.com.cn;
+    location /.well-known/acme-challenge/ { root /usr/share/nginx/html; }
+    location / { return 301 https://$host$request_uri; }
+}

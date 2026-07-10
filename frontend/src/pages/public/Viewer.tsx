@@ -6,9 +6,19 @@
  *
  * P-VIEWER 范围：从 API 拿到的 material 对象不再透传 `downloadUrl` 给子组件，
  * 避免子组件误引用导致下载入口泄露。`streamUrl` / `imageUrls` 等仍按需透传。
+ *
+ * 访问会话埋点：
+ * - 素材加载成功 → AccessSessionAPI.start({ materialId, coursewareId })
+ *   后端按 B-1 自动跳过 OPEN 课件,失败/未记录均 best-effort
+ * - 组件 unmount → AccessSessionAPI.leave(sessionId, { durationSeconds })
+ *   优先 sendBeacon,回退 fetch keepalive;失败静默
  */
-import { useEffect, useState } from "react";
-import { PublicCoursewareAPI, type PublicMaterialItem } from "@/api";
+import { useEffect, useRef, useState } from "react";
+import {
+  PublicCoursewareAPI,
+  AccessSessionAPI,
+  type PublicMaterialItem,
+} from "@/api";
 import { useViewStore } from "@/stores/view";
 import { VideoPlayer } from "./viewer/VideoPlayer";
 import { PdfReader } from "./viewer/PdfReader";
@@ -40,6 +50,10 @@ export function Viewer() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 访问会话埋点 ref
+  const sessionIdRef = useRef<number | null>(null);
+  const startTsRef = useRef<number>(0);
+
   useEffect(() => {
     if (id == null) {
       setError("缺少素材参数");
@@ -54,6 +68,15 @@ export function Viewer() {
         if (cancelled) return;
         setMaterial(data);
         setLoading(false);
+        // 埋点:开启访问会话(后端 B-1 自动跳过 OPEN)
+        startTsRef.current = Date.now();
+        AccessSessionAPI.start({
+          materialId: id,
+          coursewareId: coursewareId,
+        }).then((resp) => {
+          if (cancelled) return;
+          sessionIdRef.current = resp.sessionId;
+        });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -64,8 +87,23 @@ export function Viewer() {
       });
     return () => {
       cancelled = true;
+      // 埋点:离开时关闭会话(切页/返回/关闭浏览器)
+      const sid = sessionIdRef.current;
+      if (sid != null) {
+        const dur = Math.max(
+          0,
+          Math.round((Date.now() - startTsRef.current) / 1000),
+        );
+        sessionIdRef.current = null; // 防止重复触发
+        // 不 await:leave 是 best-effort
+        void AccessSessionAPI.leave({
+          sessionId: sid,
+          coursewareId: coursewareId,
+          durationSeconds: dur,
+        });
+      }
     };
-  }, [id]);
+  }, [id, coursewareId]);
 
   // 返回 P-DETAIL：携带 coursewareId 时回到课件详情；否则回到首页（plan §5a.6）。
   const handleBack = () => {
