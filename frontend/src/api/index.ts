@@ -71,7 +71,7 @@ export const TagAPI = {
 export type MaterialItem = {
   id: number;
   name: string;
-  type: "VIDEO" | "PDF" | "PPT";
+  type: "VIDEO" | "PDF" | "PPT" | "ZIP";
   sizeBytes: number;
   duration: string | null;
   uploadedAt: string | null;
@@ -316,7 +316,7 @@ export type CoursewareMaterialBrief = {
 export type PublicMaterialItem = {
   id: number;
   name: string;
-  type: "VIDEO" | "PDF" | "PPT";
+  type: "VIDEO" | "PDF" | "PPT" | "ZIP";
   sizeBytes: number;
   duration: string | null;
   streamUrl: string;

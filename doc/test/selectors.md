@@ -72,6 +72,7 @@
 
 > **v1.2 起**：P-DETAIL 不再提供"下载到本地"入口，`p-detail-material-download-link`
 > 与 `p-detail-pdf-link` 均被移除，仅保留 `p-detail-material-browse-btn`。
+> **v1.6+ ZIP 类型例外**：ZIP 素材仅显示 `p-detail-material-download-btn`（文案 `下载`），不显示浏览按钮。
 
 | 元素 | `data-testid` | `aria-label` |
 | ---- | ------------- | ------------ |
@@ -82,6 +83,7 @@
 | 描述 | `p-detail-description` | - |
 | 素材项 | `p-detail-material` | 属性 `data-material-id` / `data-material-type` |
 | 素材项“在线浏览”按钮 | `p-detail-material-browse-btn` | `在线浏览` |
+| 素材项“下载”按钮（ZIP/未知类型） | `p-detail-material-download-btn` | `下载` |
 | 返回搜索 | `p-detail-back-btn` | `返回搜索` |
 | Logo | `p-detail-logo` | - |
 | 视频播放器 | `p-detail-video` | - |
@@ -92,6 +94,9 @@
 > 不暴露 `/api/public/materials/{id}/file`。`p-viewer-download-link`、
 > `p-detail-material-download-link` 与 `p-detail-pdf-link` 均被移除。
 > 错误 / 加载态文案保留但不提供下载链接。
+>
+> **v1.6+ ZIP 素材不入 P-VIEWER**：详情页 `data-material-type="ZIP"` 仍正常渲染但仅显示下载按钮。
+> 若用户从 URL 直接访问 `/viewer?id=<zip_id>`，详情页前端会显示 ViewerError 卡片（“该素材仅支持下载”），并提供返回按钮；不要依赖 `p-viewer-video` / `p-viewer-pdf` / `p-viewer-ppt` 任一根容器。
 
 #### 3.5.0 公共顶栏（三种样式共享）
 

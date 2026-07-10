@@ -3,7 +3,7 @@ import { MaterialAPI, type MaterialItem } from "@/api";
 import { toast } from "@/stores/toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
-const TYPE_LABELS: Record<string, string> = { VIDEO: "视频", PDF: "PDF", PPT: "PPT" };
+const TYPE_LABELS: Record<string, string> = { VIDEO: "视频", PDF: "PDF", PPT: "PPT", ZIP: "ZIP文档" };
 const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 与后端 MAX_SIZE_BYTES、nginx client_max_body_size 对齐
 
 function formatBytes(b: number): string {
@@ -134,14 +134,14 @@ export function MaterialsPage() {
           {uploading ? "上传中…" : "拖拽文件到此处,或点击选择"}
         </p>
         <p className="text-xs text-slate-400 mt-1">
-          支持 MP4 / PDF / PPT / PPTX,单文件 ≤ 200MB
+          支持 MP4 / PDF / PPT / PPTX / ZIP,单文件 ≤ 200MB
         </p>
         <input
           ref={fileRef}
           data-testid="upload-file-input"
           type="file"
           multiple
-          accept=".mp4,.pdf,.ppt,.pptx"
+          accept=".mp4,.pdf,.ppt,.pptx,.zip"
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -173,6 +173,7 @@ export function MaterialsPage() {
             <option value="VIDEO">视频</option>
             <option value="PDF">PDF</option>
             <option value="PPT">PPT</option>
+            <option value="ZIP">ZIP文档</option>
           </select>
           <span className="text-xs text-slate-500" data-testid="material-total">
             共 {total} 个

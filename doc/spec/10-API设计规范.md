@@ -749,7 +749,7 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 | 字段 | 必填 | 说明 |
 | ---- | ---- | ---- |
 | `keyword` | ❌ | 名称模糊匹配 |
-| `type` | ❌ | `VIDEO` / `PDF` / `PPT` |
+| `type` | ❌ | `VIDEO` / `PDF` / `PPT` / `ZIP` |
 | `page`, `size` | ❌ | 见 [§1.6](#16-分页约定) |
 
 **响应 `200 OK`**
@@ -779,8 +779,8 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 
 | 字段 | 类型 | 说明 |
 | ---- | ---- | ---- |
-| `type` | string | `VIDEO` / `PDF` / `PPT`（含 `.ppt` 与 `.pptx`） |
-| `duration` | string \| null | 视频为时长 `HH:MM:SS` 或 `MM:SS`；PDF/PPT 为页数 |
+| `type` | string | `VIDEO` / `PDF` / `PPT` / `ZIP`（PPT 含 `.ppt` 与 `.pptx`；ZIP 含 `.zip`） |
+| `duration` | string \| null | 视频为时长 `HH:MM:SS` 或 `MM:SS`；PDF/PPT 为页数；ZIP 始终为 `null` |
 | `referenced` | bool | 是否被任意课件引用；为 `true` 时禁止删除 |
 | `downloadUrl` | string | 受 `AdminAuthMiddleware` 保护;返回原始文件流 |
 
@@ -792,13 +792,13 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 
 | 字段 | 必填 | 约束 |
 | ---- | ---- | ---- |
-| `file` | ✅ | 扩展名 `.mp4` / `.pdf` / `.ppt` / `.pptx`；size ≤ 200MB |
+| `file` | ✅ | 扩展名 `.mp4` / `.pdf` / `.ppt` / `.pptx` / `.zip`；size ≤ 200MB |
 | `type` | ❌ | 未指定则按扩展名推断；与实际不一致以扩展名为准 |
 
 **响应 `201 Created`**
 
 ```json
-{ "code": "ok", "message": "ok", "data": { "id": 102, "name": "Onboarding.pdf", "type": "PDF", "sizeBytes": 4321098 }, "requestId": "req-..." }
+{ "code": "ok", "message": "ok", "data": { "id": 102, "name": "project-source.zip", "type": "ZIP", "sizeBytes": 4321098 }, "requestId": "req-..." }
 ```
 
 **错误**
@@ -1127,9 +1127,9 @@ LLM 输出 SQL 字符串必须依次通过 [backend/app/services/_sql_safety.py]
 | ---- | ---- | ---- |
 | `id` | long | 素材 ID |
 | `name` | string | 原始文件名 |
-| `type` | enum | `VIDEO` / `PDF` / `PPT`（详见 [§6.2.2](#622-素材类型-materialtype)） |
+| `type` | enum | `VIDEO` / `PDF` / `PPT` / `ZIP`（详见 [§6.2.2](#622-素材类型-materialtype)） |
 | `sizeBytes` | long | 字节数 |
-| `duration` | string \| null | 视频为时长（如 `12:34`），PDF/PPT 为页数或 `null` |
+| `duration` | string \| null | 视频为时长（如 `12:34`），PDF/PPT 为页数或 `null`；ZIP 始终为 `null` |
 | `downloadUrl` | string | `GET /api/public/materials/{id}/file`，以 `attachment` 下发 |
 | `streamUrl` | string | `GET /api/public/materials/{id}/stream`，以 `inline` 下发（详见 [§5.2.4](#524-公开素材流式接口)） |
 | `sortOrder` | int | v1.5+ 该素材在课件内的展示顺序（0..N-1）；客户端应以 `materials[]` 数组顺序作为权威，sortOrder 仅作字段冗余便于调试 |
@@ -1166,7 +1166,7 @@ LLM 输出 SQL 字符串必须依次通过 [backend/app/services/_sql_safety.py]
 }
 ```
 
-- `previewReady`：VIDEO/PDF 始终为 `true`；PPT 在 `preview_pdf_path` 存在且文件可访问时为 `true`，供前端展示“预览生成中”提示。
+- `previewReady`：VIDEO/PDF/ZIP 始终为 `true`；PPT 在 `preview_pdf_path` 存在且文件可访问时为 `true`，供前端展示“预览生成中”提示。
 - 限流：`60/minute/ip`。
 - 受限课件中的素材同样需携带 `X-Token-Hash`（与 [§5.2](#52-课件详情) 一致）。
 
@@ -1190,6 +1190,7 @@ LLM 输出 SQL 字符串必须依次通过 [backend/app/services/_sql_safety.py]
 | PDF | `application/pdf` | `inline; filename="<name>.pdf"` | 文件名会重命名为 `.pdf`，避免浏览器按原后缀下载 |
 | PPT/PPTX 且 `preview_pdf_path` 存在 | `application/pdf` | `inline; filename="<name>.pdf"` | 后端已自动转换；返回转换后的 PDF |
 | PPT/PPTX 且 `preview_pdf_path` 为 NULL | 嗅探的 mime 或 `application/octet-stream` | `attachment; filename="<name>"` | **兜底**：避免浏览器意外触发原生预览/下载逻辑；客户端应展示“预览生成中” |
+| ZIP | 嗅探的 mime 或 `application/zip` | `attachment; filename="<name>"` | ZIP 仅支持下载；详情页不应跳到 P-VIEWER，若直接访问则返附件触发浏览器下载 |
 
 - 限流：`60/minute/ip`。
 - 受限课件中的素材同样需携带 `X-Token-Hash`。

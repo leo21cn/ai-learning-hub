@@ -150,34 +150,50 @@ export function DetailPage() {
               {cw.materials?.length === 0 && (
                 <li className="text-sm text-slate-400">该课件尚未上传素材</li>
               )}
-              {cw.materials?.map((m) => (
-                <li
-                  key={m.id}
-                  data-testid="p-detail-material"
-                  data-material-type={m.type}
-                  data-material-id={m.id}
-                  className="bg-white border border-slate-200 rounded p-3 flex items-center justify-between gap-3"
-                >
-                  <div className="text-sm min-w-0 flex-1">
-                    <span className="font-medium text-slate-800 break-all">
-                      {m.name}
-                    </span>
-                    <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
-                      ({m.type}, {Math.round(m.sizeBytes / 1024)} KB)
-                    </span>
-                  </div>
-                  {/* v1.2 起:P-DETAIL 不再提供"下载到本地"入口,仅保留"在线浏览" */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      data-testid="p-detail-material-browse-btn"
-                      onClick={() => handleBrowse(m.id)}
-                      className="text-sm text-primary-600 hover:bg-primary-50 px-3 py-1 rounded"
-                    >
-                      在线浏览
-                    </button>
-                  </div>
-                </li>
-              ))}
+              {cw.materials?.map((m) => {
+                // ZIP 走下载，其他可浏览类型进入 P-VIEWER；未知类型默认为下载兜底。
+                const isBrowsable =
+                  m.type === "VIDEO" || m.type === "PDF" || m.type === "PPT";
+                return (
+                  <li
+                    key={m.id}
+                    data-testid="p-detail-material"
+                    data-material-type={m.type}
+                    data-material-id={m.id}
+                    className="bg-white border border-slate-200 rounded p-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="text-sm min-w-0 flex-1">
+                      <span className="font-medium text-slate-800 break-all">
+                        {m.name}
+                      </span>
+                      <span className="text-xs text-slate-500 ml-2 whitespace-nowrap">
+                        ({m.type}, {Math.round(m.sizeBytes / 1024)} KB)
+                      </span>
+                    </div>
+                    {/* v1.2 起 P-DETAIL 不再提供“下载到本地”入口；ZIP/未知类型作为例外仅提供下载。 */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isBrowsable ? (
+                        <button
+                          data-testid="p-detail-material-browse-btn"
+                          onClick={() => handleBrowse(m.id)}
+                          className="text-sm text-primary-600 hover:bg-primary-50 px-3 py-1 rounded"
+                        >
+                          在线浏览
+                        </button>
+                      ) : (
+                        <a
+                          href={m.downloadUrl}
+                          download={m.name}
+                          data-testid="p-detail-material-download-btn"
+                          className="text-sm text-primary-600 hover:bg-primary-50 px-3 py-1 rounded"
+                        >
+                          下载
+                        </a>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </article>

@@ -156,6 +156,15 @@ export function Viewer() {
           onLogo={handleLogo}
         />
       );
+    case "ZIP":
+      // ZIP 仅支持下载，不进入 P-VIEWER；正常路径从 P-DETAIL 走下载按钮不会到达此处。
+      // 仅当用户从 URL 直接访问 /viewer?id=<zip_id> 时进行友好提示。
+      return (
+        <ViewerError
+          message="该素材仅支持下载，请在课件详情页使用「下载」按钮获取文件。"
+          onBack={handleBack}
+        />
+      );
     default:
       return (
         <ViewerError

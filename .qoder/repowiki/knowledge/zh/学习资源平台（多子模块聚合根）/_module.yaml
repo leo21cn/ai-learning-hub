@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: ""
-title: Learning Hub 全栈项目根
+title: 学习资源平台（多子模块聚合根）
 scope:
     - .gitignore
     - package.json

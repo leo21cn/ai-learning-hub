@@ -296,6 +296,7 @@ function MaterialSorter({
             <option value="VIDEO">视频</option>
             <option value="PDF">PDF</option>
             <option value="PPT">PPT</option>
+            <option value="ZIP">ZIP文档</option>
           </select>
         </div>
         <div className="max-h-60 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50">

@@ -17,6 +17,7 @@ class MaterialType(str, enum.Enum):
     VIDEO = "VIDEO"
     PDF = "PDF"
     PPT = "PPT"
+    ZIP = "ZIP"
 
 
 # 扩展名 → 类型的映射
@@ -25,6 +26,7 @@ _EXT_MAP = {
     "pdf": MaterialType.PDF,
     "ppt": MaterialType.PPT,
     "pptx": MaterialType.PPT,
+    "zip": MaterialType.ZIP,
 }
 
 

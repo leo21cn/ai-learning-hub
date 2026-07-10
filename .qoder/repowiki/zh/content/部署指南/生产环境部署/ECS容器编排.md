@@ -13,6 +13,13 @@
 - [backend/app/core/config.py](file://backend/app/core/config.py)
 </cite>
 
+## 更新摘要
+**变更内容**
+- 新增 `-SkipForceUpdate` 参数，支持跳过 Swarm task 强制刷新
+- 改进 Docker buildx builder 管理的智能回退逻辑
+- 增强对非标准 Docker 配置的错误处理能力
+- 优化跨编译环境的构建流程
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -262,11 +269,14 @@ FE --- VOL
   - 使用 docker stack ps learning-hub 查看状态；必要时查看服务日志
 - 证书与 vhost
   - 首次部署需执行 phase1 与 phase2 完成证书签发与 443 server block 插入
+- **新增** Task 未刷新问题
+  - 如果服务未显示最新镜像内容，可使用 -SkipForceUpdate 参数跳过强制刷新，或手动执行 `docker service update --force <service>`
 
 章节来源
 - [deploy/ecs/compose.yml:14-20](file://deploy/ecs/compose.yml#L14-L20)
 - [deploy/ecs/publish.ps1:239-268](file://deploy/ecs/publish.ps1#L239-L268)
 - [deploy/ecs/publish.ps1:270-302](file://deploy/ecs/publish.ps1#L270-L302)
+- [deploy/ecs/publish.ps1:240-253](file://deploy/ecs/publish.ps1#L240-L253)
 
 ## 结论
 本编排方案通过外部网络复用与外部卷持久化，实现了 learning-hub 与现有 postgres 与 nginx-gateway 的松耦合集成。publish.ps1 提供了端到端的自动化发布能力，覆盖构建、传输、初始化、部署与健康检查。结合合理的健康检查与重启策略，系统在单节点环境下具备基本的可用性与可恢复性。
@@ -281,6 +291,7 @@ FE --- VOL
 ### 参数说明
 - SkipBuild：跳过本地构建与镜像保存，直接复用本地已有镜像
 - SkipNginx：跳过 nginx-gateway 证书与 vhost 变更（仅在需要重新部署应用时使用）
+- **新增** SkipForceUpdate：跳过 Swarm task 强制刷新，避免不必要的任务重建
 - WaitHealthyTimeout：等待服务 Running 的超时秒数（默认 300）
 
 ### 典型用法
@@ -290,6 +301,8 @@ FE --- VOL
   - PS> .\publish.ps1 -SkipBuild
 - 仅更新应用（不改动 nginx-gateway）
   - PS> .\publish.ps1 -SkipNginx
+- **新增** 跳过强制刷新（适用于镜像标签不变但需要重新部署的场景）
+  - PS> .\publish.ps1 -SkipForceUpdate
 
 ### 主要流程
 - 加载 .env 并校验必填键
@@ -299,11 +312,19 @@ FE --- VOL
 - 远程初始化工作目录与持久卷
 - 远程初始化数据库（幂等）
 - 远程加载镜像并执行 docker stack deploy
+- **新增** 可选：强制刷新 Swarm tasks 以重新解析镜像标签
 - 轮询服务状态直至 Running
 - 可选：申请证书、注入 vhost、重载 nginx
 
+### Docker Buildx Builder 管理改进
+- **智能回退逻辑**：当找不到 'lhxbuild' builder 时，自动尝试使用 'default' builder
+- **跨编译环境支持**：在非标准 Docker 配置下提供更好的兼容性
+- **错误处理增强**：提供更详细的错误信息和回退策略
+
 章节来源
-- [deploy/ecs/publish.ps1:1-322](file://deploy/ecs/publish.ps1#L1-L322)
+- [deploy/ecs/publish.ps1:1-338](file://deploy/ecs/publish.ps1#L1-L338)
 - [deploy/ecs/.env.example:1-41](file://deploy/ecs/.env.example#L1-L41)
 - [deploy/ecs/remote-setup.sh:1-19](file://deploy/ecs/remote-setup.sh#L1-L19)
 - [deploy/ecs/db-init.sh:1-37](file://deploy/ecs/db-init.sh#L1-L37)
+- [deploy/ecs/publish.ps1:105-141](file://deploy/ecs/publish.ps1#L105-L141)
+- [deploy/ecs/publish.ps1:240-253](file://deploy/ecs/publish.ps1#L240-L253)

@@ -418,6 +418,32 @@
 
 > 依据：[02 F01.08](../spec/02-功能需求.md) / [08 §8a AC-019~021](../spec/08-验收标准.md) / [03 §5.4](../spec/03-前台门户规格.md) / [09 §6.3](../spec/09-UI规格.md)。v1.2 起 P-DETAIL 同步去除了原“下载到本地”文字链接。
 
+### F-047a：ZIP 素材详情页仅显示“下载”按钮（v1.6+）
+
+| 项 | 内容 |
+| ---- | ---- |
+| 前置 | 已上传 ZIP 素材 `MAT_ZIP_1`，且已加入某开放课件（`CW_OPEN_BASIC`） |
+| 步骤 | 1. 进入 `P-DETAIL` 详情页 |
+| 预期 | - `data-material-type="ZIP"` 的素材块可见<br>- 该素材块存在 `p-detail-material-download-btn`，文案为 `下载`<br>- 该素材块**不存在** `p-detail-material-browse-btn`<br>- 页面中 ZIP 素材的 `(type, size KB)` 元信息显示为 `(ZIP, NNN KB)` |
+| 步骤 | 2. 点击 ZIP 素材的 `p-detail-material-download-btn` |
+| 预期 | - 浏览器触发下载，文件名保持原 `.zip` 文件名<br>- 后端响应头 `Content-Disposition: attachment; filename="<name>.zip"` |
+| 选择器 | `p-detail-material[data-material-type="ZIP"]`, `p-detail-material-download-btn` |
+| 清理 | 无 |
+
+> 依据：[08 §8a AC-019a](../spec/08-验收标准.md) / [10 §4.4.1 type 枚举](../spec/10-API设计规范.md) / [selectors.md §3.4 ZIP 例外](../selectors.md)。该行为是 P-DETAIL 上唯一的“非在线浏览”路径，仅对 ZIP 与未知类型生效。
+
+### F-047b：直接 URL 访问 ZIP 素材的 P-VIEWER 显示提示（v1.6+）
+
+| 项 | 内容 |
+| ---- | ---- |
+| 前置 | 同 F-047a |
+| 步骤 | 1. 直接打开 `?view=viewer&id=<MAT_ZIP_1>` |
+| 预期 | - 页面**不**渲染 `p-viewer-video` / `p-viewer-pdf` / `p-viewer-ppt` 任一根容器<br>- 显示 ViewerError 卡片，文案包含 `仅支持下载`<br>- 点击 `返回详情` 按钮跳回 `P-DETAIL`（URL 变为 `view=detail&id=<coursewareId>`） |
+| 选择器 | `p-viewer-video`, `p-viewer-pdf`, `p-viewer-ppt`（断言 toHaveCount(0)） |
+| 清理 | 无 |
+
+> 依据：[08 §8a AC-019b](../spec/08-验收标准.md)。该用例覆盖“用户复制 URL 直接访问”的兜底路径，正常业务路径（从详情页点按钮）不会进入此分支。
+
 ---
 
 ## 5a. 素材在线浏览页（P-VIEWER）
