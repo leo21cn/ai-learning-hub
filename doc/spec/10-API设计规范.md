@@ -571,6 +571,7 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 
 - 当 `accessMode` 从 `OPEN` 切到 `RESTRICTED`：必须同时携带非空 `accessTokenIds`，否则 400。
 - 当 `accessMode` 从 `RESTRICTED` 切回 `OPEN`：忽略 `accessTokenIds`，自动清空关联。
+- **`materialIds` 按数组下标 0..N-1 完整重写 `sortOrder`**（与专用 §4.1.6 接口语义一致）。不在传入中的素材 → DELETE 关联行；传入中有但 DB 中没有的 ID → INSERT 后参与重排；**仅调换位置（无增删）的拖拽改序**也能正常保存。
 
 #### 4.1.5 `DELETE /api/admin/coursewares/{id}`
 
@@ -588,7 +589,7 @@ curl -X POST http://localhost/api/public/coursewares/42/unlock \
 
 - **语义**：仅修改顺序，不增删素材。
 - **校验**：① 课件存在；② `materialIds` 数量与当前一致；③ 全部 ID 属于该课件；④ 无重复。任一失败 → 400 `courseware_materials_invalid`。
-- **与 PUT §4.1.4 的区别**：PUT 走"集合替换"语义（新素材追加末尾，旧素材保留原 `sortOrder`），不重写 `sortOrder`；本接口是**唯一**会按数组下标重写 `sortOrder` 的入口。
+- **与 PUT §4.1.4 的关系**：从 v1.5.1 起，PUT §4.1.4 的 `materialIds` 与本接口语义一致（按数组下标重写 `sortOrder`）。本接口保留作为仅调整顺序、不修改其他字段的便捷入口。
 
 **请求体**
 

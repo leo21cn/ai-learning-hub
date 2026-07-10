@@ -208,18 +208,20 @@ def update(
     if tag_ids is not None:
         obj.tags = _resolve_tags(db, tag_ids)
     if material_ids is not None:
-        # R-20: 集合替换语义——保留原 sortOrder,新素材追加到末尾。
-        # 直接用 SQL 操作 courseware_material 表,避免 ORM 二次同步
-        # secondary table 时按 new_materials 顺序覆写 sort_order 的副作用。
+        # R-20: 集合按数组下标完整重写 sort_order 语义。
+        # 统一行为：与专用 /materials/order 接口一致——传入 materialIds 的顺序
+        # 即为期望的展示顺序,后端按 0..N-1 重写 sort_order。
+        # 这样管理员在前端拖拽改顺序时(仅调换位置、无增删)能正常保存。
+        # 增删处理仍保留：DB 有但不在传入中 → DELETE;传入中有但 DB 没有 → INSERT。
         from app.models.association import courseware_material  # noqa: PLC0415
-    
+
+        target_ids = [int(mid) for mid in material_ids]
+        target_set = set(target_ids)
         old_materials = list(obj.materials or [])
-        old_index = {m.id: i for i, m in enumerate(old_materials)}
-        max_old = max(old_index.values()) if old_index else -1
-        target_set = set(int(mid) for mid in material_ids)
+        old_set = {m.id for m in old_materials}
+
+        # 1) DELETE 被移除的关联行
         to_remove = [m.id for m in old_materials if m.id not in target_set]
-        to_add = sorted(target_set - set(old_index.keys()))
-        # DELETE 被移除的关联行
         if to_remove:
             db.execute(
                 courseware_material.delete().where(
@@ -227,17 +229,30 @@ def update(
                     & (courseware_material.c.material_id.in_(to_remove))
                 )
             )
-        # INSERT 新增的关联行(预留 sort_order=max_old+1..)
-        next_ord = max_old + 1
-        for mid in to_add:
+
+        # 2) INSERT 新增的关联行（sort_order 先填占位,后被下面 3) 覆盖）
+        to_insert = [mid for mid in target_ids if mid not in old_set]
+        for mid in to_insert:
             db.execute(
                 courseware_material.insert().values(
                     courseware_id=obj.id,
                     material_id=mid,
-                    sort_order=next_ord,
+                    sort_order=-1,  # 占位,会被下面的批量 UPDATE 覆盖
                 )
             )
-            next_ord += 1
+
+        # 3) 按 material_ids 数组下标 0..N-1 重写所有 sort_order
+        #    (包括未发生增删的已有行)
+        for idx, mid in enumerate(target_ids):
+            db.execute(
+                courseware_material.update()
+                .where(
+                    (courseware_material.c.courseware_id == obj.id)
+                    & (courseware_material.c.material_id == mid)
+                )
+                .values(sort_order=idx)
+            )
+
         db.flush()
         # 过期 ORM 缓存,下次访问 obj.materials 时从 DB 重读
         db.expire(obj, ["materials"])

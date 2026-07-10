@@ -92,10 +92,10 @@ def test_courseware_materials_default_sort_order_on_create(
 
 # ----------------------- AC-042 -----------------------
 
-def test_courseware_delete_material_preserves_other_sort_order(
+def test_courseware_delete_material_rewrites_sort_order(
     client: TestClient, courseware_payload
 ):
-    """AC-042: 通过 PUT 把素材从 3 个减到 2 个,保留的两个 sortOrder 不变。"""
+    """AC-042: 通过 PUT 删除素材时,保留的素材 sortOrder 按数组下标重写 (0..N-1)。"""
     m1 = _upload_material(client, "a.pdf")
     m2 = _upload_material(client, "b.pdf")
     m3 = _upload_material(client, "c.pdf")
@@ -106,16 +106,15 @@ def test_courseware_delete_material_preserves_other_sort_order(
             category_id=leaf, access_mode="OPEN", material_ids=[m1, m2, m3]
         ),
     ).json()["data"]["id"]
-    # 移除 m2(原 sortOrder=1),只保留 m1(0) / m3(2)
+    # 移除 m2,只保留 m1 / m3 → 期望按数组下标重写: m1=0, m3=1
     r = client.put(
         f"/api/admin/coursewares/{cid}",
         json={"materialIds": [m1, m3]},
     )
     assert r.status_code == 200, r.text
     detail = client.get(f"/api/admin/coursewares/{cid}").json()["data"]
-    # 剩下的两个保持原 sortOrder(0,2),不重排
     assert detail["materialIds"] == [m1, m3]
-    assert [m["sortOrder"] for m in detail["materials"]] == [0, 2]
+    assert [m["sortOrder"] for m in detail["materials"]] == [0, 1]
 
 
 # ----------------------- AC-043 -----------------------
@@ -230,10 +229,10 @@ def test_courseware_reorder_duplicate_ids(
 
 # ----------------------- AC-047 -----------------------
 
-def test_courseware_update_material_ids_keeps_old_sort_order(
+def test_courseware_update_material_ids_rewrites_sort_order(
     client: TestClient, courseware_payload
 ):
-    """AC-047: PUT /{id} 替换素材集合时,旧素材保留原 sortOrder,新素材追加末尾。"""
+    """AC-047: PUT /{id} 替换素材集合时,sortOrder 按传入数组下标重写 (0..N-1)。"""
     m1 = _upload_material(client, "a.pdf")
     m2 = _upload_material(client, "b.pdf")
     m3 = _upload_material(client, "c.pdf")
@@ -244,8 +243,8 @@ def test_courseware_update_material_ids_keeps_old_sort_order(
             category_id=leaf, access_mode="OPEN", material_ids=[m1, m2]
         ),
     ).json()["data"]["id"]
-    # 此时 m1.sortOrder=0, m2.sortOrder=1
-    # 替换为 [m2, m3]  → m2 保留 1;m3 追加为 2
+    # 初始: m1.sortOrder=0, m2.sortOrder=1
+    # 拖拽重排为 [m2, m3] → m2 改为 0(下标 0),m3 新增为 1(下标 1)
     r = client.put(
         f"/api/admin/coursewares/{cid}",
         json={"materialIds": [m2, m3]},
@@ -254,8 +253,8 @@ def test_courseware_update_material_ids_keeps_old_sort_order(
     detail = client.get(f"/api/admin/coursewares/{cid}").json()["data"]
     assert detail["materialIds"] == [m2, m3]
     so = {m["id"]: m["sortOrder"] for m in detail["materials"]}
-    assert so[m2] == 1
-    assert so[m3] == 2
+    assert so[m2] == 0
+    assert so[m3] == 1
 
 
 # ----------------------- AC-049 -----------------------

@@ -107,9 +107,11 @@ if (-not $SkipBuild) {
     # Make sure a single-node 'lhxbuild' buildx builder exists; create if absent.
     $builderExists = (& docker buildx ls 2>$null) -join "`n" -match '(?m)^lhxbuild\b'
     if (-not $builderExists) {
-        OutStep "Bootstrapping one-shot buildx builder 'lhxbuild' (docker-container driver)..."
-        & docker buildx create --name lhxbuild --driver docker-container --bootstrap --use | Out-Null
-        if ($LASTEXITCODE -ne 0) { OutErr "buildx create failed; falling back to 'docker build' (may fail on x86 host)"; & docker buildx use default }
+        # Windows / Docker Desktop: docker driver 只能创建一个 default builder。
+        # 直接复用 default builder（Docker Desktop 默认启用了 QEMU,可交叉编译 arm64）。
+        OutStep "No 'lhxbuild' builder found; using default builder (Docker Desktop + QEMU)..."
+        & docker buildx use default | Out-Null
+        if ($LASTEXITCODE -ne 0) { OutErr "docker buildx use default failed"; exit 1 }
     } else {
         & docker buildx use lhxbuild | Out-Null
     }
@@ -162,7 +164,8 @@ if (-not $SkipBuild) {
 # ---- 5) Remote: mkdir the working dir (must precede scp) -------------------
 function Invoke-Ssh {
     param([string]$Cmd)
-    & ssh -i $EC.Key -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$($EC.User)@$($EC.Host)" $Cmd
+    # 用 $output 变量吃 SSH stdout,避免返回值被 "OK" 字符串污染。
+    $output = & ssh -i $EC.Key -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$($EC.User)@$($EC.Host)" $Cmd 2>&1
     return $LASTEXITCODE
 }
 
