@@ -1,0 +1,68 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-07-10T12:15:52Z"
+modules:
+    "":
+        dir_name: Learning Hub 全栈项目根
+        title: Learning Hub 全栈项目根
+        scope:
+            - .gitignore
+            - package.json
+            - package-lock.json
+        source_files: []
+        children:
+            - backend_service
+            - deploy_infra
+            - frontend_app
+        depends_on: []
+        related_to: []
+    backend_service:
+        dir_name: Learning Hub 后端服务（FastAPI + SQLAlchemy）
+        title: Learning Hub 后端服务（FastAPI + SQLAlchemy）
+        scope:
+            - backend/
+        source_files: []
+        children:
+            - backend_service/scripts_and_config
+        depends_on: []
+        related_to:
+            - path: deploy_infra
+            - path: frontend_app
+    backend_service/scripts_and_config:
+        dir_name: 后端本地开发脚本与一次性运维工具
+        title: 后端本地开发脚本与一次性运维工具
+        scope:
+            - backend/dev_init.py
+            - backend/dev_seed.py
+            - backend/backfill_video_durations.py
+            - backend/_dev_check.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    deploy_infra:
+        dir_name: ECS 生产部署与本地开发编排
+        title: ECS 生产部署与本地开发编排
+        scope:
+            - deploy/
+            - doc/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend_service
+            - path: frontend_app
+    frontend_app:
+        dir_name: 学习资源平台前端应用（React + Vite SPA）
+        title: 学习资源平台前端应用（React + Vite SPA）
+        scope:
+            - frontend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend_service
+            - path: deploy_infra

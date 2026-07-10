@@ -38,6 +38,7 @@
 param(
     [switch]$SkipBuild,
     [switch]$SkipNginx,
+    [switch]$SkipForceUpdate,
     [int]$WaitHealthyTimeout = 300
 )
 
@@ -109,11 +110,34 @@ if (-not $SkipBuild) {
     if (-not $builderExists) {
         # Windows / Docker Desktop: docker driver 只能创建一个 default builder。
         # 直接复用 default builder（Docker Desktop 默认启用了 QEMU,可交叉编译 arm64）。
+        # 当前 context 若非 'default',需先用 `docker context use default` 让 buildx 的
+        # 'default' builder 名解析到本机 Docker Desktop daemon;若切换失败则回退到
+        # 当前 context 下唯一的 builder(常见为 desktop-linux)。
+        $ctxName = (& docker context show 2>$null).Trim()
+        if ($ctxName -ne 'default') {
+            OutStep "Switching docker context: $ctxName -> default (for buildx 'default' builder)"
+            & docker context use default | Out-Null
+        }
         OutStep "No 'lhxbuild' builder found; using default builder (Docker Desktop + QEMU)..."
         & docker buildx use default | Out-Null
-        if ($LASTEXITCODE -ne 0) { OutErr "docker buildx use default failed"; exit 1 }
+        if ($LASTEXITCODE -ne 0) {
+            # 回退:在当前 context 下寻找一个能 build linux/arm64 的 builder
+            $ctxBuilders = (& docker buildx ls 2>$null | Out-String) -split "`n" | Where-Object { $_ -and $_ -notmatch '^[A-Za-z0-9_-]+ \*' }
+            $fallback = $null
+            foreach ($line in $ctxBuilders) {
+                if ($line -match '^\s*([A-Za-z0-9_-]+)\s') { $fallback = $matches[1]; break }
+            }
+            if (-not $fallback) {
+                # 最终回退:打印当前 docker context 下默认 builder 名(即 context 名)
+                $fallback = $ctxName
+            }
+            OutWarn "docker buildx use default failed; falling back to builder '$fallback'"
+            & docker buildx use $fallback | Out-Null
+            if ($LASTEXITCODE -ne 0) { OutErr "no usable buildx builder"; exit 1 }
+        }
     } else {
         & docker buildx use lhxbuild | Out-Null
+        if ($LASTEXITCODE -ne 0) { OutErr "docker buildx use lhxbuild failed"; exit 1 }
     }
 
     OutStep "Building backend image for linux/arm64 (LibreOffice + deps are heavy; 5-10 min first time)..."
@@ -212,6 +236,21 @@ $deployEnv = "POSTGRES_NETWORK_NAME='$($envVars['POSTGRES_NETWORK_NAME'])' POSTG
 $rc = Invoke-Ssh "cd $($EC.RemoteDir) ; $deployEnv docker stack deploy -c compose.yml learning-hub"
 if ($rc -ne 0) { OutErr "docker stack deploy failed (exit=$rc)"; exit 1 }
 OutOk "learning-hub stack deployed"
+
+# Force-refresh tasks so Swarm re-resolves image tag digest.
+# Without this, `docker stack deploy` may leave the running container bound
+# to the OLD image digest even after we `docker load` a new image with the
+# same tag, so users keep seeing the previous frontend bundle.
+if (-not $SkipForceUpdate) {
+    OutStep "Force-refresh tasks so Swarm re-resolves image tag digest"
+    foreach ($svc in @('learning-hub_backend','learning-hub_frontend')) {
+        $rc = Invoke-Ssh "docker service update --force $svc"
+        if ($rc -ne 0) { OutWarn "force update $svc failed (exit=$rc)" }
+        else { OutOk "$svc task replaced" }
+    }
+} else {
+    OutWarn "SkipForceUpdate is on; tasks may keep the previous image digest"
+}
 
 # ---- 7) Poll stack status ---------------------------------------------------
 OutStep "Waiting for backend / frontend Running (timeout=${WaitHealthyTimeout}s)"

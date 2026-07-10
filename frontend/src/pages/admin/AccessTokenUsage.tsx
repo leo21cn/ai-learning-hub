@@ -462,7 +462,6 @@ function LedgerTable({
                 <th className="px-4 py-2">课件</th>
                 <th className="px-4 py-2">素材</th>
                 <th className="px-4 py-2">类型</th>
-                <th className="px-4 py-2">IP</th>
                 <th className="px-4 py-2">状态</th>
               </tr>
             </thead>
@@ -489,7 +488,6 @@ function LedgerTable({
                   <td className="px-4 py-2 text-slate-500 text-xs">
                     {s.materialType}
                   </td>
-                  <td className="px-4 py-2 text-slate-500 text-xs">{s.ip || "-"}</td>
                   <td className="px-4 py-2 text-xs">
                     {s.clientLeave ? (
                       <span className="text-slate-500">已结束</span>

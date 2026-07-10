@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: deploy_infra
+title: ECS 生产部署与本地开发编排
+scope:
+    - deploy/
+    - doc/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_service
+    - path: frontend_app

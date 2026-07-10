@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_service/scripts_and_config
+title: 后端本地开发脚本与一次性运维工具
+scope:
+    - backend/dev_init.py
+    - backend/dev_seed.py
+    - backend/backfill_video_durations.py
+    - backend/_dev_check.py
+source_files: []
+depends_on: []
+related_to: []
