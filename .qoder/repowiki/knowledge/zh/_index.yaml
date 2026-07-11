@@ -3,11 +3,11 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-07-10T13:54:06Z"
+exported_at: "2026-07-10T14:50:55Z"
 modules:
     "":
-        dir_name: 学习资源平台（多子模块聚合根）
-        title: 学习资源平台（多子模块聚合根）
+        dir_name: Learning Hub 多子模块聚合根
+        title: Learning Hub 多子模块聚合根
         scope:
             - .gitignore
             - package.json
@@ -52,8 +52,8 @@ modules:
         depends_on: []
         related_to: []
     frontend_app:
-        dir_name: 学习资源平台前端（React+Vite SPA）
-        title: 学习资源平台前端（React+Vite SPA）
+        dir_name: 学习资源平台前端单页应用
+        title: 学习资源平台前端单页应用
         scope:
             - frontend/
         source_files: []

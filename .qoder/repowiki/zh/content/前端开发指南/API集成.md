@@ -8,7 +8,16 @@
 - [admin.ts](file://frontend/src/stores/admin.ts)
 - [Login.tsx](file://frontend/src/pages/admin/Login.tsx)
 - [Locked.tsx](file://frontend/src/pages/public/Locked.tsx)
+- [Materials.tsx](file://frontend/src/pages/admin/Materials.tsx)
+- [Viewer.tsx](file://frontend/src/pages/public/Viewer.tsx)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新了MaterialItem和PublicMaterialItem接口的ZIP类型支持说明
+- 新增了ZIP素材类型的完整处理流程文档
+- 更新了前端组件对ZIP类型的处理方式
+- 完善了API类型安全性的说明
 
 ## 目录
 1. [简介](#简介)
@@ -31,6 +40,7 @@
 - 错误处理机制与用户友好提示
 - 最佳实践、缓存策略与 Mock 开发模式
 - API 版本管理与向后兼容
+- **新增** ZIP素材类型的完整支持与管理
 
 ## 项目结构
 前端 API 相关代码集中在以下位置：
@@ -38,12 +48,14 @@
 - 业务 API 模块（管理后台/公开接口）：frontend/src/api/index.ts
 - 状态存储（令牌哈希记忆、管理员会话）：frontend/src/stores/token.ts、frontend/src/stores/admin.ts
 - 登录与解锁页面（认证流程入口）：frontend/src/pages/admin/Login.tsx、frontend/src/pages/public/Locked.tsx
+- **新增** 素材管理页面（支持ZIP类型）：frontend/src/pages/admin/Materials.tsx
+- **新增** 公开查看器（ZIP类型特殊处理）：frontend/src/pages/public/Viewer.tsx
 
 ```mermaid
 graph TB
 subgraph "API层"
 C["client.ts<br/>axios实例/拦截器"]
-I["index.ts<br/>REST接口封装"]
+I["index.ts<br/>REST接口封装<br/>+ ZIP类型支持"]
 end
 subgraph "状态层"
 T["stores/token.ts<br/>已解锁令牌哈希"]
@@ -52,21 +64,27 @@ end
 subgraph "页面层"
 L["pages/admin/Login.tsx<br/>管理员登录"]
 K["pages/public/Locked.tsx<br/>公开课件解锁"]
+M["pages/admin/Materials.tsx<br/>素材管理<br/>+ ZIP类型"]
+V["pages/public/Viewer.tsx<br/>公开查看器<br/>+ ZIP处理"]
 end
 L --> A
 K --> T
 I --> C
 I --> T
 A --> C
+M --> I
+V --> I
 ```
 
-图表来源
+**图表来源**
 - [client.ts:1-52](file://frontend/src/api/client.ts#L1-L52)
 - [index.ts:1-443](file://frontend/src/api/index.ts#L1-L443)
 - [token.ts:1-54](file://frontend/src/stores/token.ts#L1-L54)
 - [admin.ts:1-71](file://frontend/src/stores/admin.ts#L1-L71)
 - [Login.tsx:1-72](file://frontend/src/pages/admin/Login.tsx#L1-L72)
 - [Locked.tsx:1-113](file://frontend/src/pages/public/Locked.tsx#L1-L113)
+- [Materials.tsx:1-277](file://frontend/src/pages/admin/Materials.tsx#L1-L277)
+- [Viewer.tsx:1-179](file://frontend/src/pages/public/Viewer.tsx#L1-L179)
 
 章节来源
 - [client.ts:1-52](file://frontend/src/api/client.ts#L1-L52)
@@ -75,6 +93,8 @@ A --> C
 - [admin.ts:1-71](file://frontend/src/stores/admin.ts#L1-L71)
 - [Login.tsx:1-72](file://frontend/src/pages/admin/Login.tsx#L1-L72)
 - [Locked.tsx:1-113](file://frontend/src/pages/public/Locked.tsx#L1-L113)
+- [Materials.tsx:1-277](file://frontend/src/pages/admin/Materials.tsx#L1-L277)
+- [Viewer.tsx:1-179](file://frontend/src/pages/public/Viewer.tsx#L1-L179)
 
 ## 核心组件
 - HTTP 客户端（client.ts）
@@ -86,8 +106,9 @@ A --> C
   - 按领域分组：Auth、Categories、Tags、Materials、AccessTokens、AccessSessions、Coursewares、Public
   - 统一 unwrap 将 envelope.data 透传为返回值
   - 公开接口在需要时附加 X-Token-Hash 头以绕过 Set-Cookie 时序问题
+  - **更新** MaterialItem 和 PublicMaterialItem 接口现已支持 ZIP 类型
 - 状态存储
-  - token.ts：持久化“已解锁课件 -> tokenHash”映射，支持刷新与初始化
+  - token.ts：持久化"已解锁课件 -> tokenHash"映射，支持刷新与初始化
   - admin.ts：管理员登录/登出，基于 Cookie 会话，本地仅存过期时间用于恢复判断
 
 章节来源
@@ -115,9 +136,10 @@ AX->>AX : 响应拦截 : code!=ok则抛错;否则resp.data=data
 AX-->>API : Promise<{data}>
 API-->>P : 直接返回data
 Note over API,S : 某些接口会读写store(如unlock写入tokenHash)
+Note over API,P : ZIP类型素材的特殊处理逻辑
 ```
 
-图表来源
+**图表来源**
 - [client.ts:19-49](file://frontend/src/api/client.ts#L19-L49)
 - [index.ts:25-443](file://frontend/src/api/index.ts#L25-L443)
 - [token.ts:38-48](file://frontend/src/stores/token.ts#L38-L48)
@@ -151,7 +173,7 @@ ReturnResp --> End(["结束"])
 ThrowErr --> End
 ```
 
-图表来源
+**图表来源**
 - [client.ts:25-49](file://frontend/src/api/client.ts#L25-L49)
 
 章节来源
@@ -170,6 +192,10 @@ ThrowErr --> End
   - 对受限课件的 GET/GET 素材接口，自动从 store 读取对应 coursewareId 的 tokenHash，并以 X-Token-Hash 头传递，避免与 Set-Cookie 时序耦合
 - 上传
   - MaterialAPI.upload 使用 FormData，设置 multipart/form-data，并覆盖超时至 15 分钟，提供 onUploadProgress 回调占位
+- **更新** 类型定义增强
+  - MaterialItem.type 现已支持 "VIDEO" | "PDF" | "PPT" | "ZIP"
+  - PublicMaterialItem.type 同样支持完整的四种类型
+  - 所有ZIP相关的API调用都具备完整的类型安全保障
 
 ```mermaid
 classDiagram
@@ -219,9 +245,31 @@ class PublicCoursewareAPI {
 +unlock(id, token)
 +getMaterial(id)
 }
+class MaterialItem {
++id : number
++name : string
++type : "VIDEO"|"PDF"|"PPT"|"ZIP"
++sizeBytes : number
++duration : string|null
++uploadedAt : string|null
++referenced : boolean
++downloadUrl : string
+}
+class PublicMaterialItem {
++id : number
++name : string
++type : "VIDEO"|"PDF"|"PPT"|"ZIP"
++sizeBytes : number
++duration : string|null
++streamUrl : string
++downloadUrl? : string
++previewReady : boolean
++imageUrls : string[]
++imageCount : number
+}
 ```
 
-图表来源
+**图表来源**
 - [index.ts:25-443](file://frontend/src/api/index.ts#L25-L443)
 
 章节来源
@@ -258,7 +306,7 @@ AS-->>L : 登录完成
 L-->>U : 跳转管理后台
 ```
 
-图表来源
+**图表来源**
 - [Login.tsx:18-32](file://frontend/src/pages/admin/Login.tsx#L18-L32)
 - [admin.ts:37-58](file://frontend/src/stores/admin.ts#L37-L58)
 - [index.ts:26-32](file://frontend/src/api/index.ts#L26-L32)
@@ -270,6 +318,50 @@ L-->>U : 跳转管理后台
 - [index.ts:25-32](file://frontend/src/api/index.ts#L25-L32)
 - [client.ts:1-52](file://frontend/src/api/client.ts#L1-L52)
 
+### ZIP素材类型支持详解
+**更新** TypeScript API层现已完整支持ZIP素材类型，提供端到端的类型安全保障。
+
+#### 类型定义增强
+- MaterialItem 接口中的 type 字段扩展为 `"VIDEO" | "PDF" | "PPT" | "ZIP"`
+- PublicMaterialItem 接口同步支持完整的四种类型
+- 所有ZIP相关的API调用都具备编译时类型检查
+
+#### 前端处理逻辑
+- **素材管理页面** (Materials.tsx)
+  - TYPE_LABELS 映射包含 "ZIP": "ZIP文档"
+  - 支持ZIP文件的拖拽上传和批量处理
+  - 文件验证接受 `.zip` 扩展名
+  - 列表显示ZIP类型标签和文件大小
+  
+- **公开查看器** (Viewer.tsx)
+  - ZIP类型特殊处理：不进入P-VIEWER在线预览
+  - 直接访问ZIP素材URL时显示友好提示信息
+  - 引导用户使用课件详情页的下载功能
+
+```mermaid
+flowchart TD
+A["用户上传ZIP文件"] --> B["前端类型验证<br/>.zip扩展名检查"]
+B --> C["MaterialAPI.upload<br/>multipart/form-data"]
+C --> D["后端处理ZIP文件<br/>保存到存储系统"]
+D --> E["返回MaterialItem<br/>type='ZIP'"]
+E --> F["前端显示'ZIP文档'<br/>大小信息"]
+F --> G["用户点击下载按钮"]
+G --> H["浏览器触发ZIP文件下载"]
+H --> I["完成ZIP文件获取"]
+```
+
+**图表来源**
+- [Materials.tsx:6](file://frontend/src/pages/admin/Materials.tsx#L6)
+- [Materials.tsx:144](file://frontend/src/pages/admin/Materials.tsx#L144)
+- [Materials.tsx:176](file://frontend/src/pages/admin/Materials.tsx#L176)
+- [Viewer.tsx:159-167](file://frontend/src/pages/public/Viewer.tsx#L159-L167)
+
+章节来源
+- [index.ts:71-80](file://frontend/src/api/index.ts#L71-L80)
+- [index.ts:315-332](file://frontend/src/api/index.ts#L315-L332)
+- [Materials.tsx:1-277](file://frontend/src/pages/admin/Materials.tsx#L1-L277)
+- [Viewer.tsx:150-179](file://frontend/src/pages/public/Viewer.tsx#L150-L179)
+
 ### 请求取消、并发控制与性能优化
 - 请求取消
   - 当前未实现 AbortController 取消逻辑。可在 apiClient 基础上扩展，或在调用处传入 signal 并通过 axios 配置进行取消
@@ -279,6 +371,7 @@ L-->>U : 跳转管理后台
   - 大文件上传：MaterialAPI.upload 覆盖超时至 15 分钟，并提供 onUploadProgress 回调占位，可用于进度条
   - 访问上报：AccessSessionAPI.leave 优先 sendBeacon，失败回退 fetch keepalive，提高可靠性
   - 减少重复请求：可引入内存/持久化缓存（如按 URL+params 键控），配合版本号与失效策略
+  - **新增** ZIP文件上传优化：支持大文件（≤200MB）的可靠传输
 
 章节来源
 - [index.ts:92-115](file://frontend/src/api/index.ts#L92-L115)
@@ -291,6 +384,10 @@ L-->>U : 跳转管理后台
   - 当 envelope.code !== 'ok' 时抛出错误，message 来自后端 message 或 code
 - 用户提示
   - 页面层捕获错误并展示（例如 LoginPage 与 LockedPage 均捕获并显示 message）
+- **更新** ZIP类型特定错误处理
+  - 上传超限错误：友好的中文提示，指导用户压缩或拆分文件
+  - 网络超时错误：明确的网络异常提示
+  - 服务器错误：统一的错误处理机制
 
 ```mermaid
 flowchart TD
@@ -302,18 +399,23 @@ BizErr --> |否| Unknown["未知错误"]
 WrapNet --> ShowUI["页面层捕获并提示"]
 WrapBiz --> ShowUI
 Unknown --> ShowUI
+ShowUI --> ZipErr{"是否为ZIP相关错误?"}
+ZipErr --> |是| ZipHint["显示ZIP特定提示<br/>如'超过200MB上限'"]
+ZipErr --> |否| GenericHint["显示通用错误提示"]
 ```
 
-图表来源
+**图表来源**
 - [client.ts:40-49](file://frontend/src/api/client.ts#L40-L49)
 - [client.ts:25-39](file://frontend/src/api/client.ts#L25-L39)
 - [Login.tsx:25-31](file://frontend/src/pages/admin/Login.tsx#L25-L31)
 - [Locked.tsx:34-43](file://frontend/src/pages/public/Locked.tsx#L34-L43)
+- [Materials.tsx:22-41](file://frontend/src/pages/admin/Materials.tsx#L22-L41)
 
 章节来源
 - [client.ts:25-49](file://frontend/src/api/client.ts#L25-L49)
 - [Login.tsx:18-32](file://frontend/src/pages/admin/Login.tsx#L18-L32)
 - [Locked.tsx:29-44](file://frontend/src/pages/public/Locked.tsx#L29-L44)
+- [Materials.tsx:22-41](file://frontend/src/pages/admin/Materials.tsx#L22-L41)
 
 ### 认证流程与权限检查（公开课件）
 - 解锁流程
@@ -341,7 +443,7 @@ K-->>U : 跳转到详情页
 Note over API,B : 后续GET详情/素材将附加X-Token-Hash
 ```
 
-图表来源
+**图表来源**
 - [Locked.tsx:29-44](file://frontend/src/pages/public/Locked.tsx#L29-L44)
 - [index.ts:422-428](file://frontend/src/api/index.ts#L422-L428)
 - [token.ts:38-48](file://frontend/src/stores/token.ts#L38-L48)
@@ -355,23 +457,28 @@ Note over API,B : 后续GET详情/素材将附加X-Token-Hash
 - client.ts 被 index.ts 与 stores/admin.ts 共同依赖
 - index.ts 依赖 token.ts 获取 X-Token-Hash
 - pages 层依赖各自 store 与 API 模块
+- **更新** Materials.tsx 和 Viewer.tsx 现在依赖增强的MaterialItem类型定义
 
 ```mermaid
 graph LR
-client["client.ts"] --> index["index.ts"]
+client["client.ts"] --> index["index.ts<br/>+ ZIP类型支持"]
 client --> admin_store["stores/admin.ts"]
 index --> token_store["stores/token.ts"]
 login_page["pages/admin/Login.tsx"] --> admin_store
 locked_page["pages/public/Locked.tsx"] --> token_store
+materials_page["pages/admin/Materials.tsx<br/>+ ZIP处理"] --> index
+viewer_page["pages/public/Viewer.tsx<br/>+ ZIP处理"] --> index
 ```
 
-图表来源
+**图表来源**
 - [client.ts:1-52](file://frontend/src/api/client.ts#L1-L52)
 - [index.ts:1-443](file://frontend/src/api/index.ts#L1-L443)
 - [token.ts:1-54](file://frontend/src/stores/token.ts#L1-L54)
 - [admin.ts:1-71](file://frontend/src/stores/admin.ts#L1-L71)
 - [Login.tsx:1-72](file://frontend/src/pages/admin/Login.tsx#L1-L72)
 - [Locked.tsx:1-113](file://frontend/src/pages/public/Locked.tsx#L1-L113)
+- [Materials.tsx:1-277](file://frontend/src/pages/admin/Materials.tsx#L1-L277)
+- [Viewer.tsx:1-179](file://frontend/src/pages/public/Viewer.tsx#L1-L179)
 
 章节来源
 - [client.ts:1-52](file://frontend/src/api/client.ts#L1-L52)
@@ -380,6 +487,8 @@ locked_page["pages/public/Locked.tsx"] --> token_store
 - [admin.ts:1-71](file://frontend/src/stores/admin.ts#L1-L71)
 - [Login.tsx:1-72](file://frontend/src/pages/admin/Login.tsx#L1-L72)
 - [Locked.tsx:1-113](file://frontend/src/pages/public/Locked.tsx#L1-L113)
+- [Materials.tsx:1-277](file://frontend/src/pages/admin/Materials.tsx#L1-L277)
+- [Viewer.tsx:1-179](file://frontend/src/pages/public/Viewer.tsx#L1-L179)
 
 ## 性能考虑
 - 超时与重试
@@ -388,11 +497,10 @@ locked_page["pages/public/Locked.tsx"] --> token_store
 - 并发与去重
   - 建议引入请求去重与并发上限，避免短时间内大量重复请求
 - 资源加载
-  - 视频/PPT/PDF 等大资源建议使用分片/懒加载/预取策略
+  - 视频/PPT/PDF/ZIP 等大资源建议使用分片/懒加载/预取策略
+  - **新增** ZIP文件优化：支持大文件（≤200MB）的可靠传输和进度反馈
 - 上报优化
   - leave 使用 sendBeacon/fetch keepalive 提升可靠性
-
-[本节为通用指导，无需源码引用]
 
 ## 故障排查指南
 - 登录失败
@@ -407,6 +515,10 @@ locked_page["pages/public/Locked.tsx"] --> token_store
   - 关注 onUploadProgress 回调是否触发
 - 访问上报丢失
   - 检查 sendBeacon 是否可用，必要时回退路径是否执行
+- **新增** ZIP文件相关问题
+  - 上传失败：检查文件大小是否超过200MB限制
+  - 类型识别错误：确认文件扩展名为`.zip`
+  - 下载问题：检查浏览器下载设置和网络连接
 
 章节来源
 - [client.ts:25-49](file://frontend/src/api/client.ts#L25-L49)
@@ -414,11 +526,10 @@ locked_page["pages/public/Locked.tsx"] --> token_store
 - [index.ts:168-216](file://frontend/src/api/index.ts#L168-L216)
 - [Login.tsx:25-31](file://frontend/src/pages/admin/Login.tsx#L25-L31)
 - [Locked.tsx:34-43](file://frontend/src/pages/public/Locked.tsx#L34-L43)
+- [Materials.tsx:22-41](file://frontend/src/pages/admin/Materials.tsx#L22-L41)
 
 ## 结论
-本集成方案通过统一的 axios 客户端与响应拦截器，实现了稳定的信封解析与错误标准化；API 模块按领域划分，清晰表达 RESTful 语义；认证采用“管理员 Cookie + 公开令牌哈希”的双轨模式，兼顾安全与易用性。后续可在请求取消、并发控制、缓存与重试方面进一步增强，以提升鲁棒性与用户体验。
-
-[本节为总结，无需源码引用]
+本集成方案通过统一的 axios 客户端与响应拦截器，实现了稳定的信封解析与错误标准化；API 模块按领域划分，清晰表达 RESTful 语义；认证采用"管理员 Cookie + 公开令牌哈希"的双轨模式，兼顾安全与易用性。**最新更新**增强了TypeScript类型安全性，特别是ZIP素材类型的完整支持，确保了从API定义到前端组件的类型一致性。后续可在请求取消、并发控制、缓存与重试方面进一步增强，以提升鲁棒性与用户体验。
 
 ## 附录
 
@@ -427,6 +538,9 @@ locked_page["pages/public/Locked.tsx"] --> token_store
   - 部分返回字段标注为可选（如 downloadUrl），以便后续剥离时保持类型合法
 - 排序与顺序
   - 课件素材列表新增 sortOrder 字段，并按该顺序返回，便于前端渲染稳定顺序
+- **更新** ZIP类型兼容性
+  - MaterialItem 和 PublicMaterialItem 的 type 字段向后兼容，新增ZIP类型不影响现有功能
+  - 前端组件已适配ZIP类型的特殊处理逻辑
 - 兼容性建议
   - 新增字段应声明为可选
   - 删除字段需保留一段时间并给出迁移指引
@@ -435,10 +549,13 @@ locked_page["pages/public/Locked.tsx"] --> token_store
 章节来源
 - [index.ts:301-355](file://frontend/src/api/index.ts#L301-L355)
 - [index.ts:357-402](file://frontend/src/api/index.ts#L357-L402)
+- [index.ts:71-80](file://frontend/src/api/index.ts#L71-L80)
+- [index.ts:315-332](file://frontend/src/api/index.ts#L315-L332)
 
 ### 最佳实践清单
 - 统一错误处理
   - 在页面层捕获 Error，依据 code/status 区分网络/业务错误，并展示友好提示
+  - **新增** ZIP类型特定的错误处理和用户提示
 - 幂等请求重试
   - 对 GET/HEAD 等幂等请求，在网络错误时可尝试有限次数的指数退避重试
 - 请求取消
@@ -450,5 +567,6 @@ locked_page["pages/public/Locked.tsx"] --> token_store
 - Mock 开发模式
   - 在开发环境通过 Vite 代理或本地 Mock Server 模拟后端响应，屏蔽真实网络依赖
   - 使用与生产一致的信封格式与错误码，保证联调一致性
-
-[本节为通用指导，无需源码引用]
+- **新增** 类型安全实践
+  - 充分利用TypeScript的类型系统，确保API响应与组件使用的类型一致性
+  - 为新类型（如ZIP）提供完整的类型定义和处理逻辑

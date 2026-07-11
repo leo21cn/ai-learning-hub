@@ -13,7 +13,17 @@
 - [backend/app/core/errors.py](file://backend/app/core/errors.py)
 - [backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py](file://backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py)
 - [backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py](file://backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py)
+- [frontend/src/pages/public/Detail.tsx](file://frontend/src/pages/public/Detail.tsx)
+- [frontend/src/pages/public/Viewer.tsx](file://frontend/src/pages/public/Viewer.tsx)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新了素材类型系统，新增ZIP类型支持
+- 扩展了文件类型推断机制，支持.zip扩展名识别
+- 完善了ZIP类型的业务处理逻辑，实现仅下载不支持预览的行为
+- 更新了前端交互逻辑，ZIP素材显示下载按钮而非在线浏览按钮
+- 增强了错误处理和用户体验，提供友好的ZIP访问提示
 
 ## 目录
 1. [简介](#简介)
@@ -27,7 +37,7 @@
 9. [结论](#结论)
 
 ## 简介
-本设计文档围绕“素材模型(Material)”展开，系统支持视频(video)、PDF、PPT/PPTX三种文件类型的统一建模。文档覆盖：
+本设计文档围绕"素材模型(Material)"展开，系统支持视频(video)、PDF、PPT/PPTX、ZIP四种文件类型的统一建模。文档覆盖：
 - 多类型统一建模与类型推断
 - 文件元数据字段（原始文件名、存储路径、大小、时长/页数等）
 - 预览图管理字段（缩略图/封面图相关字段与实现现状）
@@ -43,6 +53,7 @@
 - API 层：admin/materials.py、public/materials.py
 - 配置与错误：config.py、errors.py
 - 数据库迁移：sort_order 与 preview_images_dir 相关版本脚本
+- 前端页面：Detail.tsx、Viewer.tsx
 
 ```mermaid
 graph TB
@@ -58,6 +69,10 @@ subgraph "API层"
 AM["api/admin/materials.py"]
 PM["api/public/materials.py"]
 end
+subgraph "前端层"
+FD["pages/public/Detail.tsx"]
+FV["pages/public/Viewer.tsx"]
+end
 subgraph "配置与错误"
 C["core/config.py"]
 E["core/errors.py"]
@@ -71,27 +86,19 @@ AM --> C
 PM --> C
 S --> C
 S --> E
+FD --> PM
+FV --> PM
 ```
 
-图表来源
-- [backend/app/models/material.py:1-69](file://backend/app/models/material.py#L1-L69)
+**图表来源**
+- [backend/app/models/material.py:1-71](file://backend/app/models/material.py#L1-L71)
 - [backend/app/models/association.py:1-41](file://backend/app/models/association.py#L1-L41)
 - [backend/app/services/material.py:1-234](file://backend/app/services/material.py#L1-L234)
 - [backend/app/services/ppt_to_images.py:1-185](file://backend/app/services/ppt_to_images.py#L1-L185)
 - [backend/app/api/admin/materials.py:1-74](file://backend/app/api/admin/materials.py#L1-L74)
 - [backend/app/api/public/materials.py:1-224](file://backend/app/api/public/materials.py#L1-L224)
-- [backend/app/core/config.py:1-88](file://backend/app/core/config.py#L1-L88)
-- [backend/app/core/errors.py:103-143](file://backend/app/core/errors.py#L103-L143)
-
-章节来源
-- [backend/app/models/material.py:1-69](file://backend/app/models/material.py#L1-L69)
-- [backend/app/models/association.py:1-41](file://backend/app/models/association.py#L1-L41)
-- [backend/app/services/material.py:1-234](file://backend/app/services/material.py#L1-L234)
-- [backend/app/services/ppt_to_images.py:1-185](file://backend/app/services/ppt_to_images.py#L1-L185)
-- [backend/app/api/admin/materials.py:1-74](file://backend/app/api/admin/materials.py#L1-L74)
-- [backend/app/api/public/materials.py:1-224](file://backend/app/api/public/materials.py#L1-L224)
-- [backend/app/core/config.py:1-88](file://backend/app/core/config.py#L1-L88)
-- [backend/app/core/errors.py:103-143](file://backend/app/core/errors.py#L103-L143)
+- [frontend/src/pages/public/Detail.tsx:150-204](file://frontend/src/pages/public/Detail.tsx#L150-L204)
+- [frontend/src/pages/public/Viewer.tsx:150-178](file://frontend/src/pages/public/Viewer.tsx#L150-L178)
 
 ## 核心组件
 - 素材模型 Material：定义素材表结构与类型枚举，提供从文件名推断类型的工具函数。
@@ -99,20 +106,14 @@ S --> E
 - 素材服务 material service：封装素材的列表、上传、删除、获取等业务逻辑；包含视频时长探测与 PPT 转图片流程。
 - PPT 转图片服务：调用外部工具链将 PPT/PPTX 转换为 PDF，再拆分为 PNG 序列，供前端在线浏览。
 - 管理端与公开端 API：分别提供受控的上传/下载与公开的流式预览、下载、单条查询接口。
-
-章节来源
-- [backend/app/models/material.py:14-69](file://backend/app/models/material.py#L14-L69)
-- [backend/app/models/association.py:16-26](file://backend/app/models/association.py#L16-L26)
-- [backend/app/services/material.py:78-234](file://backend/app/services/material.py#L78-L234)
-- [backend/app/services/ppt_to_images.py:48-181](file://backend/app/services/ppt_to_images.py#L48-L181)
-- [backend/app/api/admin/materials.py:23-74](file://backend/app/api/admin/materials.py#L23-L74)
-- [backend/app/api/public/materials.py:64-224](file://backend/app/api/public/materials.py#L64-L224)
+- 前端交互层：根据素材类型动态渲染不同的操作按钮和预览界面。
 
 ## 架构总览
 素材模型在系统中的交互如下：
 - 管理员通过管理端 API 上传素材，服务层写入文件系统与数据库，并对视频/ PPT 进行特殊处理。
 - 前台通过公开端 API 以流式方式预览或下载素材，并根据类型返回合适的媒体类型与内容处置策略。
 - 课件与素材通过关联表建立多对多关系，并在该表中维护 sort_order 以实现学习路径的顺序控制。
+- ZIP 类型素材采用特殊的降级处理策略，仅提供下载功能而不支持在线预览。
 
 ```mermaid
 sequenceDiagram
@@ -133,16 +134,32 @@ else 类型为 PPT/PPTX
 Service->>Service : ppt_to_images.convert()
 Service->>FS : 生成 page-*.png 到 preview_images_dir
 Service->>DB : 写入 preview_images_dir, duration_or_pages(页数)
+else 类型为 ZIP
+Service->>DB : 直接入库，无特殊处理
 end
 Service->>DB : 插入 material 记录
 AdminAPI-->>Admin : 返回 {id, name, type, sizeBytes}
 Browser->>PublicAPI : GET /api/public/materials/{id}/stream
 PublicAPI->>Service : get(material_id) + ACL检查
-PublicAPI->>FS : 读取文件/图片
+alt 类型=VIDEO
+PublicAPI->>FS : 读取 video/mp4
 PublicAPI-->>Browser : inline 响应(按类型设置 media_type)
+else 类型=PDF
+PublicAPI->>FS : 读取 application/pdf
+PublicAPI-->>Browser : inline PDF
+else 类型=PPT
+alt 有 preview_images_dir
+PublicAPI-->>Browser : 返回 imageUrls 列表
+else 无预览
+PublicAPI->>FS : 读取原 PPT(PPTX)
+PublicAPI-->>Browser : attachment 原文件
+else 类型=ZIP
+PublicAPI->>FS : 读取 zip 文件
+PublicAPI-->>Browser : attachment 原文件
+end
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/admin/materials.py:35-48](file://backend/app/api/admin/materials.py#L35-L48)
 - [backend/app/services/material.py:129-202](file://backend/app/services/material.py#L129-L202)
 - [backend/app/services/ppt_to_images.py:48-181](file://backend/app/services/ppt_to_images.py#L48-L181)
@@ -151,14 +168,14 @@ PublicAPI-->>Browser : inline 响应(按类型设置 media_type)
 ## 详细组件分析
 
 ### 素材模型 Material 与类型系统
-- 类型枚举：VIDEO、PDF、PPT，用于统一建模三类文件。
-- 类型推断：基于文件扩展名映射 mp4→VIDEO、pdf→PDF、ppt/pptx→PPT；不支持的类型抛出业务异常。
+- 类型枚举：VIDEO、PDF、PPT、ZIP，用于统一建模四类文件。
+- 类型推断：基于文件扩展名映射 mp4→VIDEO、pdf→PDF、ppt/pptx→PPT、zip→ZIP；不支持的类型抛出业务异常。
 - 字段说明：
   - id：自增主键
   - name：原始文件名
   - type：素材类型字符串（与枚举值一致）
   - size_bytes：文件大小（字节）
-  - duration_or_pages：视频时长或 PPT 页数（字符串，便于前端统一处理）
+  - duration_or_pages：视频时长或 PPT 页数（字符串，便于前端统一处理），ZIP 类型始终为 NULL
   - storage_path：二进制文件在文件系统的绝对路径
   - preview_images_dir：PPT 转换后的图片目录（page-1.png, page-2.png...），未转换时为 NULL
   - uploaded_at：上传时间（由数据库默认值维护）
@@ -180,6 +197,7 @@ class MaterialType {
 +VIDEO
 +PDF
 +PPT
++ZIP
 }
 class Association {
 +courseware_id
@@ -190,22 +208,22 @@ MaterialType <.. Material : "type 取值"
 Association --> Material : "多对多引用"
 ```
 
-图表来源
-- [backend/app/models/material.py:14-69](file://backend/app/models/material.py#L14-L69)
+**图表来源**
+- [backend/app/models/material.py:14-71](file://backend/app/models/material.py#L14-L71)
 - [backend/app/models/association.py:16-26](file://backend/app/models/association.py#L16-L26)
 
-章节来源
-- [backend/app/models/material.py:14-69](file://backend/app/models/material.py#L14-L69)
+**章节来源**
+- [backend/app/models/material.py:14-71](file://backend/app/models/material.py#L14-L71)
 
 ### 文件元数据与技术属性
 - 原始文件名：name，保留用户上传时的名称，用于下载时回传 filename。
 - 存储路径：storage_path，指向实际二进制文件位置，服务层负责读写与清理。
 - 文件大小：size_bytes，上传过程中累计字节数。
 - MIME 类型：未在模型中持久化，下载/预览时通过文件名使用系统库推断 media_type。
-- 时长/页数：duration_or_pages，视频为时长字符串（MM:SS 或 HH:MM:SS），PPT 为页数字符串。
+- 时长/页数：duration_or_pages，视频为时长字符串（MM:SS 或 HH:MM:SS），PPT 为页数字符串，ZIP 类型始终为 NULL。
 
-章节来源
-- [backend/app/models/material.py:50-62](file://backend/app/models/material.py#L50-L62)
+**章节来源**
+- [backend/app/models/material.py:52-64](file://backend/app/models/material.py#L52-L64)
 - [backend/app/services/material.py:36-76](file://backend/app/services/material.py#L36-L76)
 - [backend/app/api/admin/materials.py:65-70](file://backend/app/api/admin/materials.py#L65-L70)
 - [backend/app/api/public/materials.py:76-81](file://backend/app/api/public/materials.py#L76-L81)
@@ -213,8 +231,9 @@ Association --> Material : "多对多引用"
 ### 预览图管理字段与实现现状
 - 当前模型字段：preview_images_dir 指向 PPT 生成的图片目录（page-1.png, page-2.png...）。
 - 历史兼容：存在旧列 preview_pdf_path（迁移脚本保留但不读写），新代码不再使用该列。
-- 缩略图/封面图：当前未定义专用缩略图或封面图字段；PPT 的“首帧”可通过 imageUrls[0] 作为封面使用。
+- 缩略图/封面图：当前未定义专用缩略图或封面图字段；PPT 的"首帧"可通过 imageUrls[0] 作为封面使用。
 - 前端消费：公开接口返回 imageUrls 与 imageCount，用于幻灯片查看器直接渲染图片。
+- ZIP 类型：不参与预览处理，preview_images_dir 始终为 NULL。
 
 ```mermaid
 flowchart TD
@@ -224,15 +243,17 @@ Success --> |是| SaveDir["保存 preview_images_dir 与页数"]
 Success --> |否| Fallback["不阻断上传; preview_images_dir 为 NULL"]
 SaveDir --> End(["完成"])
 Fallback --> End
+Start2(["上传 ZIP"]) --> Direct["直接入库，无预览处理"]
+Direct --> End
 ```
 
-图表来源
+**图表来源**
 - [backend/app/services/material.py:174-202](file://backend/app/services/material.py#L174-L202)
 - [backend/app/services/ppt_to_images.py:48-181](file://backend/app/services/ppt_to_images.py#L48-L181)
 - [backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py:30-34](file://backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py#L30-L34)
 
-章节来源
-- [backend/app/models/material.py:56-59](file://backend/app/models/material.py#L56-L59)
+**章节来源**
+- [backend/app/models/material.py:58-61](file://backend/app/models/material.py#L58-L61)
 - [backend/app/api/public/materials.py:207-221](file://backend/app/api/public/materials.py#L207-L221)
 - [backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py:1-39](file://backend/alembic/versions/2026_07_07_1230-b2c3d4e5f607_replace_preview_pdf_with_images.py#L1-L39)
 
@@ -256,11 +277,11 @@ int sort_order
 }
 ```
 
-图表来源
+**图表来源**
 - [backend/app/models/association.py:16-26](file://backend/app/models/association.py#L16-L26)
 - [backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py:33-104](file://backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py#L33-L104)
 
-章节来源
+**章节来源**
 - [backend/app/models/association.py:16-26](file://backend/app/models/association.py#L16-L26)
 - [backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py:33-104](file://backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py#L33-L104)
 
@@ -268,9 +289,10 @@ int sort_order
 - 创建时间：uploaded_at 使用数据库默认值 func.now() 自动维护。
 - 更新时间戳：当前模型未定义 updated_at 字段；如需审计可在后续扩展。
 - 删除流程：先检查是否被课件引用，若未被引用则物理删除 storage_path 与 preview_images_dir 目录。
+- ZIP 类型：删除时仅删除 storage_path，不涉及预览目录清理。
 
-章节来源
-- [backend/app/models/material.py:60-62](file://backend/app/models/material.py#L60-L62)
+**章节来源**
+- [backend/app/models/material.py:62-64](file://backend/app/models/material.py#L62-L64)
 - [backend/app/services/material.py:205-231](file://backend/app/services/material.py#L205-L231)
 
 ### 上传、下载、预览的业务逻辑支撑
@@ -279,6 +301,7 @@ int sort_order
   - 根据扩展名推断类型；失败抛业务异常。
   - 视频：调用 ffprobe 探测时长，写入 duration_or_pages。
   - PPT：调用 ppt_to_images.convert() 生成图片目录，写入 preview_images_dir 与页数。
+  - ZIP：直接入库，无需特殊处理，duration_or_pages 保持 NULL。
   - 入库失败时回滚并清理已写文件。
 - 下载（管理端/公开端）：
   - 管理端：GET /api/admin/materials/{id}/file，返回原文件 attachment。
@@ -288,6 +311,7 @@ int sort_order
     - VIDEO：video/mp4 + inline
     - PDF：application/pdf + inline
     - PPT：优先返回 preview_images_dir 对应的图片序列（imageUrls），或降级返回原 PPT（attachment）
+    - ZIP：返回原 zip 文件，强制 attachment 模式
   - GET /api/public/materials/{id}/image/{page_no}：返回第 N 张 PNG（1-indexed），越界返回错误。
   - GET /api/public/materials/{id}：返回 streamUrl、downloadUrl、sizeBytes、duration、imageUrls、imageCount、previewReady 等。
 
@@ -311,17 +335,19 @@ PublicAPI-->>Client : 返回 imageUrls 列表
 else 无预览
 PublicAPI->>FS : 读取原 PPT(PPTX)
 PublicAPI-->>Client : attachment 原文件
-end
+else 类型=ZIP
+PublicAPI->>FS : 读取 zip 文件
+PublicAPI-->>Client : attachment 原文件
 end
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/public/materials.py:84-146](file://backend/app/api/public/materials.py#L84-L146)
 - [backend/app/api/public/materials.py:149-180](file://backend/app/api/public/materials.py#L149-L180)
 - [backend/app/api/public/materials.py:183-221](file://backend/app/api/public/materials.py#L183-L221)
 - [backend/app/services/material.py:129-202](file://backend/app/services/material.py#L129-L202)
 
-章节来源
+**章节来源**
 - [backend/app/api/admin/materials.py:57-70](file://backend/app/api/admin/materials.py#L57-L70)
 - [backend/app/api/public/materials.py:64-81](file://backend/app/api/public/materials.py#L64-L81)
 - [backend/app/api/public/materials.py:84-146](file://backend/app/api/public/materials.py#L84-L146)
@@ -336,23 +362,45 @@ end
   - 无需额外转换；公开端以 application/pdf 返回 inline。
 - PPT/PPTX：
   - 上传后调用 LibreOffice 转 PDF，再用 pdftoppm 拆成 PNG 序列，存放于 preview_images_dir。
-  - 失败不阻断上传；前端走降级“下载到本地”。
+  - 失败不阻断上传；前端走降级"下载到本地"。
   - 对外暴露 imageUrls 与 imageCount，支持幻灯片查看器直接渲染。
+- ZIP：
+  - **新增支持**：上传后直接入库，不进行任何特殊处理。
+  - 仅支持下载功能，不支持在线预览。
+  - 前端详情页显示"下载"按钮而非"在线浏览"按钮。
+  - 直接访问 viewer 页面时显示友好提示信息。
 - 扩展性考虑：
   - 类型推断基于扩展名映射，新增类型需在 _EXT_MAP 中添加映射，并在上传/预览分支增加处理逻辑。
   - 预览能力可继续扩展（如新增封面图字段 thumbnail_path），但当前未定义。
 
-章节来源
-- [backend/app/models/material.py:22-41](file://backend/app/models/material.py#L22-L41)
+**章节来源**
+- [backend/app/models/material.py:14-43](file://backend/app/models/material.py#L14-L43)
 - [backend/app/services/material.py:36-76](file://backend/app/services/material.py#L36-L76)
 - [backend/app/services/material.py:168-186](file://backend/app/services/material.py#L168-L186)
 - [backend/app/services/ppt_to_images.py:48-181](file://backend/app/services/ppt_to_images.py#L48-L181)
 - [backend/app/api/public/materials.py:102-146](file://backend/app/api/public/materials.py#L102-L146)
+- [frontend/src/pages/public/Detail.tsx:153-196](file://frontend/src/pages/public/Detail.tsx#L153-L196)
+- [frontend/src/pages/public/Viewer.tsx:158-175](file://frontend/src/pages/public/Viewer.tsx#L158-L175)
+
+### ZIP 类型前端交互逻辑
+- 详情页渲染：
+  - 判断 isBrowsable = (type === "VIDEO" || type === "PDF" || type === "PPT")
+  - ZIP 类型显示"下载"按钮，其他可浏览类型显示"在线浏览"按钮
+  - 元信息显示格式为 "(ZIP, NNN KB)"
+- Viewer 页面处理：
+  - 当用户直接访问 ZIP 素材的 viewer URL 时，显示友好错误提示
+  - 提示文案："该素材仅支持下载，请在课件详情页使用「下载」按钮获取文件。"
+  - 提供"返回详情"按钮，引导用户回到正常操作流程
+
+**章节来源**
+- [frontend/src/pages/public/Detail.tsx:153-196](file://frontend/src/pages/public/Detail.tsx#L153-L196)
+- [frontend/src/pages/public/Viewer.tsx:158-175](file://frontend/src/pages/public/Viewer.tsx#L158-L175)
 
 ## 依赖关系分析
 - 模型依赖：Material 与 association.courseware_material 通过外键建立多对多关系。
 - 服务依赖：material service 依赖 config（存储路径、外部工具路径）、errors（业务异常）、ppt_to_images（PPT 转图片）。
 - API 依赖：管理端与公开端 API 均依赖 material service 与 db session；公开端还依赖 rate limiter 与 ACL 校验。
+- 前端依赖：Detail.tsx 和 Viewer.tsx 依赖公开端 API 获取素材信息并渲染相应界面。
 
 ```mermaid
 graph LR
@@ -363,27 +411,33 @@ MS --> A["models/association.py"]
 MS --> P["services/ppt_to_images.py"]
 MS --> C["core/config.py"]
 MS --> E["core/errors.py"]
+FD["Detail.tsx"] --> PM
+FV["Viewer.tsx"] --> PM
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/admin/materials.py:1-74](file://backend/app/api/admin/materials.py#L1-L74)
 - [backend/app/api/public/materials.py:1-224](file://backend/app/api/public/materials.py#L1-L224)
 - [backend/app/services/material.py:1-234](file://backend/app/services/material.py#L1-L234)
-- [backend/app/models/material.py:1-69](file://backend/app/models/material.py#L1-L69)
+- [backend/app/models/material.py:1-71](file://backend/app/models/material.py#L1-L71)
 - [backend/app/models/association.py:1-41](file://backend/app/models/association.py#L1-L41)
 - [backend/app/services/ppt_to_images.py:1-185](file://backend/app/services/ppt_to_images.py#L1-L185)
 - [backend/app/core/config.py:1-88](file://backend/app/core/config.py#L1-L88)
 - [backend/app/core/errors.py:103-143](file://backend/app/core/errors.py#L103-L143)
+- [frontend/src/pages/public/Detail.tsx:150-204](file://frontend/src/pages/public/Detail.tsx#L150-L204)
+- [frontend/src/pages/public/Viewer.tsx:150-178](file://frontend/src/pages/public/Viewer.tsx#L150-L178)
 
-章节来源
+**章节来源**
 - [backend/app/api/admin/materials.py:1-74](file://backend/app/api/admin/materials.py#L1-L74)
 - [backend/app/api/public/materials.py:1-224](file://backend/app/api/public/materials.py#L1-L224)
 - [backend/app/services/material.py:1-234](file://backend/app/services/material.py#L1-L234)
-- [backend/app/models/material.py:1-69](file://backend/app/models/material.py#L1-L69)
+- [backend/app/models/material.py:1-71](file://backend/app/models/material.py#L1-L71)
 - [backend/app/models/association.py:1-41](file://backend/app/models/association.py#L1-L41)
 - [backend/app/services/ppt_to_images.py:1-185](file://backend/app/services/ppt_to_images.py#L1-L185)
 - [backend/app/core/config.py:1-88](file://backend/app/core/config.py#L1-L88)
 - [backend/app/core/errors.py:103-143](file://backend/app/core/errors.py#L103-L143)
+- [frontend/src/pages/public/Detail.tsx:150-204](file://frontend/src/pages/public/Detail.tsx#L150-L204)
+- [frontend/src/pages/public/Viewer.tsx:150-178](file://frontend/src/pages/public/Viewer.tsx#L150-L178)
 
 ## 性能与扩展性
 - 上传性能：分块写入避免内存峰值；大小限制与超时保护防止资源耗尽。
@@ -393,8 +447,9 @@ MS --> E["core/errors.py"]
   - 新增素材类型需扩展类型映射与上传/预览分支。
   - 预览能力可扩展（如封面图字段 thumbnail_path），但当前未定义。
   - 外部工具路径与超时可通过配置项调整。
+  - ZIP 类型的加入展示了系统良好的扩展性，新增类型只需修改映射表和添加相应的业务逻辑分支。
 
-章节来源
+**章节来源**
 - [backend/app/services/material.py:129-202](file://backend/app/services/material.py#L129-L202)
 - [backend/app/services/ppt_to_images.py:48-181](file://backend/app/services/ppt_to_images.py#L48-L181)
 - [backend/app/models/association.py:22-26](file://backend/app/models/association.py#L22-L26)
@@ -408,16 +463,22 @@ MS --> E["core/errors.py"]
 - 预览失败：
   - VIDEO：确认 ffprobe 可用且文件未损坏。
   - PPT：确认 LibreOffice 与 pdftoppm 安装路径正确，转换是否超时。
-  - 文件丢失：检查 storage_path 是否存在，公开端会返回“素材文件已丢失”。
+  - ZIP：确认文件未损坏，网络传输是否正常。
+  - 文件丢失：检查 storage_path 是否存在，公开端会返回"素材文件已丢失"。
 - 排序异常：
   - 检查关联表 sort_order 是否正确按数组下标重写。
   - 检查复合索引是否存在。
+- ZIP 类型问题：
+  - 确认前端是否正确显示下载按钮而非在线浏览按钮。
+  - 检查直接访问 viewer URL 时是否显示友好的错误提示。
+  - 验证 ZIP 文件的 Content-Disposition 响应头是否正确设置为 attachment。
 
-章节来源
+**章节来源**
 - [backend/app/services/material.py:129-202](file://backend/app/services/material.py#L129-L202)
 - [backend/app/api/public/materials.py:71-81](file://backend/app/api/public/materials.py#L71-L81)
 - [backend/app/core/errors.py:103-143](file://backend/app/core/errors.py#L103-L143)
 - [backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py:98-104](file://backend/alembic/versions/2026_07_10_1800-d2e3f4a5b6c7_add_courseware_material_sort_order.py#L98-L104)
+- [frontend/src/pages/public/Viewer.tsx:158-175](file://frontend/src/pages/public/Viewer.tsx#L158-L175)
 
 ## 结论
-素材模型通过统一的类型系统与灵活的预览机制，有效支撑了视频、PDF、PPT 三类文件的上传、下载与在线预览。与课件的多对多关联通过 sort_order 实现了学习路径的顺序控制，配合复合索引提升查询性能。未来可根据业务需求扩展封面图字段与更多预览能力，同时保持现有健壮的错误处理与回滚机制。
+素材模型通过统一的类型系统与灵活的预览机制，有效支撑了视频、PDF、PPT、ZIP 四类文件的上传、下载与在线预览。新增的 ZIP 类型支持进一步丰富了系统的文件处理能力，体现了良好的扩展性设计。与课件的多对多关联通过 sort_order 实现了学习路径的顺序控制，配合复合索引提升查询性能。前端针对不同素材类型提供了差异化的用户体验，特别是 ZIP 类型的降级处理策略确保了系统的健壮性和用户友好性。未来可根据业务需求继续扩展更多素材类型和预览能力，同时保持现有健壮的错误处理与回滚机制。
