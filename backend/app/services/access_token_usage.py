@@ -12,12 +12,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, Float, func, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import ColumnElement, FunctionElement
 
+from app.core.config import get_settings
 from app.core.errors import BusinessError, ErrorCode
 from app.models.access_session import AccessSession
 from app.models.access_token import AccessToken
@@ -174,7 +176,14 @@ def leave_session(
 # ============ Admin 查询 ============
 
 def _parse_range(start: str, end: str) -> Tuple[datetime, datetime]:
-    """解析 start/end(YYYY-MM-DD)为 UTC 区间 [start 00:00, end+1 00:00)。"""
+    """解析 start/end(YYYY-MM-DD)为 UTC 区间 [start 00:00, end+1 00:00)。
+
+    业务时区为 settings.timezone(默认 Asia/Shanghai),
+    把用户输入的"本地日历日"翻译为 UTC 区间,与 DB 存储的 UTC 时间比较。
+    例:用户传 start=end="2026-07-11" 时,在 UTC+8 下
+      → [2026-07-10 16:00 UTC, 2026-07-11 16:00 UTC)
+      这样 2026-07-11 07:35(本地)的访问 = 2026-07-10 23:35 UTC 可被命中。
+    """
     try:
         sd = date.fromisoformat(start)
         ed = date.fromisoformat(end)
@@ -186,10 +195,11 @@ def _parse_range(start: str, end: str) -> Tuple[datetime, datetime]:
         raise BusinessError(
             ErrorCode.INTERNAL_ERROR, "起始日期不能晚于结束日期"
         )
-    start_dt = datetime.combine(sd, time.min, tzinfo=timezone.utc)
+    tz = ZoneInfo(get_settings().timezone)
+    start_dt = datetime.combine(sd, time.min, tzinfo=tz).astimezone(timezone.utc)
     end_exclusive = datetime.combine(
-        ed + timedelta(days=1), time.min, tzinfo=timezone.utc
-    )
+        ed + timedelta(days=1), time.min, tzinfo=tz
+    ).astimezone(timezone.utc)
     return start_dt, end_exclusive
 
 

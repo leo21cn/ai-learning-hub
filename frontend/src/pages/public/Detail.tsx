@@ -8,8 +8,7 @@
  * v1.2 起:P-DETAIL 不再提供任何"下载到本地"入口,仅保留"在线浏览"按钮。
  * 后端 `/api/public/materials/{id}/file` 端点仍存在,仅供管理后台 / 调试。
  *
- * v1.5 起:素材列表按管理员设定的 sortOrder 升序展示;
- * 当课件内素材数 > 1 时,在素材标题下方提示"由管理员设定的学习顺序"。
+ * v1.5 起:素材列表按管理员设定的 sortOrder 升序展示。
  */
 import { useEffect, useMemo, useState } from "react";
 import { useViewStore } from "@/stores/view";
@@ -137,15 +136,6 @@ export function DetailPage() {
             <h2 className="text-sm font-semibold text-slate-700 mb-3">
               素材文件({cw.materials?.length ?? 0})
             </h2>
-            {/* v1.5+: 多于 1 个素材时,提示顺序由管理员设定 */}
-            {cw.materials && cw.materials.length > 1 && (
-              <p
-                className="text-xs text-slate-500 mb-3"
-                data-testid="detail-materials-order-hint"
-              >
-                由管理员设定的学习顺序
-              </p>
-            )}
             <ul className="space-y-2" data-testid="detail-materials">
               {cw.materials?.length === 0 && (
                 <li className="text-sm text-slate-400">该课件尚未上传素材</li>

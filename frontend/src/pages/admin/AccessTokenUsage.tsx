@@ -17,20 +17,26 @@ import { toast } from "@/stores/toast";
 
 type Tab = "summary" | "ledger";
 
+/** 本地日期序列化为 YYYY-MM-DD(避免 toISOString() 带来的 UTC 偏移)。 */
+function formatLocalYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalYMD(new Date());
 }
 function monthStartISO(): string {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+  return formatLocalYMD(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
 function daysAgoISO(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return formatLocalYMD(d);
 }
 
 function formatDateTime(s: string | null | undefined): string {
@@ -134,13 +140,19 @@ export function AccessTokenUsagePage() {
     loadSummary();
   }, [loadSummary]);
 
+  // 仅 tab 切换时重置页码(仅依赖 tab,避免被 page/start/end 变化误触发)。
+  useEffect(() => {
+    setPage(1);
+  }, [tab]);
+
+  // tab 切换时加载数据。
   useEffect(() => {
     if (tab === "ledger") {
-      setPage(1);
       loadLedger();
     }
   }, [tab, loadLedger]);
 
+  // 翻页/筛选条件变化时重新加载。
   useEffect(() => {
     if (tab === "ledger") loadLedger();
   }, [page, tab, loadLedger]);

@@ -637,3 +637,77 @@ def test_admin_sessions_summary_returns_overview_only(
     assert data["totalDurationSeconds"] == 19
     assert data["coursewareCount"] == 1
     assert data["materialCount"] == 1
+
+
+# ============ 业务时区(Asia/Shanghai)下日期区间语义 ============
+
+def test_admin_list_sessions_uses_business_timezone(
+    client: TestClient, admin_login
+):
+    """业务时区为 settings.timezone(默认 Asia/Shanghai)。
+
+    场景:本地 2026-07-11 07:35 的访问 = UTC 2026-07-10 23:35 存库。
+    查询 start=end="2026-07-11"(本地日历日)应命中 1 条;
+    查询 start=end="2026-07-10"(本地日历日)应 0 条。
+
+    旧实现按 UTC 解析会导致本地 7-11 0:00-8:00 间的访问查不到。
+    """
+    from datetime import datetime, timezone as _tz
+    from app.models.access_session import AccessSession
+
+    t_id, plain = _mk_token(client, "t-tz")
+    token_hash = _hash(plain)
+    mid = _upload_pdf(client, "tz.pdf")
+    _mk_restricted_courseware_with_material(
+        client, token_ids=[t_id], material_id=mid
+    )
+
+    r = client.post(
+        "/api/public/access-sessions",
+        json={"materialId": mid},
+        headers={"X-Token-Hash": token_hash},
+    )
+    sid = r.json()["data"]["sessionId"]
+
+    # 改 started_at 到 UTC 2026-07-10 23:35 = 本地 2026-07-11 07:35
+    db_gen = app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    try:
+        obj = db.get(AccessSession, sid)
+        obj.started_at = datetime(2026, 7, 10, 23, 35, 0, tzinfo=_tz.utc)
+        db.commit()
+    finally:
+        try:
+            next(db_gen)
+        except StopIteration:
+            pass
+
+    # 本地 7-11 应命中 1 条
+    r = client.get(
+        f"/api/admin/access-tokens/{t_id}/access-sessions",
+        params={"start": "2026-07-11", "end": "2026-07-11"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["data"]
+    assert body["total"] == 1, f"本地 7-11 应命中 1 条,实际 {body['total']}"
+    assert body["items"][0]["id"] == sid
+    # summary 也应一致
+    assert body["summary"]["sessionCount"] == 1
+
+    # 本地 7-10 不应命中(UTC 7-10 23:35 = 本地 7-11)
+    r = client.get(
+        f"/api/admin/access-tokens/{t_id}/access-sessions",
+        params={"start": "2026-07-10", "end": "2026-07-10"},
+    )
+    assert r.status_code == 200
+    body = r.json()["data"]
+    assert body["total"] == 0, f"本地 7-10 不应命中,实际 {body['total']}"
+
+    # 跨日范围:本地 7-10 ~ 7-11 应命中 1 条
+    r = client.get(
+        f"/api/admin/access-tokens/{t_id}/access-sessions",
+        params={"start": "2026-07-10", "end": "2026-07-11"},
+    )
+    assert r.status_code == 200
+    body = r.json()["data"]
+    assert body["total"] == 1

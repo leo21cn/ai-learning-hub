@@ -71,11 +71,6 @@ test.describe.serial("v1.5 课件素材顺序编辑", () => {
     await page.goto(`/?q=${title}`);
     await page.getByText(title).first().click();
 
-    // 提示文案应出现
-    const hint = page.getByTestId("detail-materials-order-hint");
-    await expect(hint).toBeVisible({ timeout: 10_000 });
-    await expect(hint).toContainText("由管理员设定的学习顺序");
-
     // 素材顺序与重排后一致
     const items = page.getByTestId("p-detail-material");
     await expect(items).toHaveCount(3, { timeout: 10_000 });
