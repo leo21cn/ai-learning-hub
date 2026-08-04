@@ -151,7 +151,7 @@ async def upload(db: Session, upload: UploadFile) -> Material:
                         full_path.unlink(missing_ok=True)
                     except Exception:
                         pass
-                    raise BusinessError(ErrorCode.MATERIAL_SIZE_EXCEEDED, "文件大小不能超过 200MB")
+                    raise BusinessError(ErrorCode.MATERIAL_SIZE_EXCEEDED, "文件大小不能超过 500MB")
                 f.write(chunk)
     except BusinessError:
         raise

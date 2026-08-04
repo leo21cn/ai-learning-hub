@@ -3,11 +3,11 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-07-10T14:50:55Z"
+exported_at: "2026-07-11T05:51:11Z"
 modules:
     "":
-        dir_name: Learning Hub 多子模块聚合根
-        title: Learning Hub 多子模块聚合根
+        dir_name: 学习资源平台根聚合（后端 + 前端 + 部署编排）
+        title: 学习资源平台根聚合（后端 + 前端 + 部署编排）
         scope:
             - .gitignore
             - package.json
@@ -42,8 +42,8 @@ modules:
         depends_on: []
         related_to: []
     deploy_infra:
-        dir_name: ECS Swarm 发布与本地 Docker Desktop 编排
-        title: ECS Swarm 发布与本地 Docker Desktop 编排
+        dir_name: 部署与本地编排（ECS Swarm + Docker Desktop）
+        title: 部署与本地编排（ECS Swarm + Docker Desktop）
         scope:
             - deploy/
             - doc/
@@ -52,8 +52,8 @@ modules:
         depends_on: []
         related_to: []
     frontend_app:
-        dir_name: 学习资源平台前端单页应用
-        title: 学习资源平台前端单页应用
+        dir_name: 学习资源平台前端 SPA（公开浏览 + 管理后台）
+        title: 学习资源平台前端 SPA（公开浏览 + 管理后台）
         scope:
             - frontend/
         source_files: []

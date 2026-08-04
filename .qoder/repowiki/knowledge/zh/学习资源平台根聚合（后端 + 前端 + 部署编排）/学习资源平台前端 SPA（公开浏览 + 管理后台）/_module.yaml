@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: frontend_app
-title: 学习资源平台前端单页应用
+title: 学习资源平台前端 SPA（公开浏览 + 管理后台）
 scope:
     - frontend/
 source_files: []

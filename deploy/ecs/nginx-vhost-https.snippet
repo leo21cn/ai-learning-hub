@@ -19,7 +19,7 @@ server {
 
     charset utf-8;
 
-    # 大文件上传超时：5–10Mbps 上传 200MB 需 150–300s。
+    # 大文件上传超时：5–10Mbps 上传 500MB 需 400–800s。
     # 默认 proxy_send_timeout = 60s 会切断上传,必须拉高。client_body_timeout 同理。
     client_max_body_size 500m;
     client_body_timeout 600s;

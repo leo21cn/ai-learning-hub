@@ -12,9 +12,16 @@
 - [backend/app/api/public/access_sessions.py](file://backend/app/api/public/access_sessions.py)
 - [backend/app/api/admin/access_tokens.py](file://backend/app/api/admin/access_tokens.py)
 - [frontend/src/pages/admin/AccessTokenUsage.tsx](file://frontend/src/pages/admin/AccessTokenUsage.tsx)
+- [frontend/src/api/index.ts](file://frontend/src/api/index.ts)
 - [backend/tests/test_access_session.py](file://backend/tests/test_access_session.py)
 - [frontend/e2e/admin-access-session.spec.ts](file://frontend/e2e/admin-access-session.spec.ts)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 改进了前端日期格式化的时区一致性，使用本地时区感知的formatLocalYMD函数替代ISO字符串切片
+- 新增formatLocalYMD辅助函数确保在不同用户时区下日期显示和查询参数生成的一致性
+- 更新了E2E测试中的日期处理逻辑以匹配新的格式化方式
 
 ## 目录
 1. [简介](#简介)
@@ -30,7 +37,7 @@
 11. [结论](#结论)
 
 ## 简介
-本文件面向“令牌使用统计”能力，覆盖以下目标：
+本文件面向"令牌使用统计"能力，覆盖以下目标：
 - 访问会话的查询、统计与分析接口（管理端）
 - 用户访问行为追踪、会话时长统计与访问频率分析（公共端 + 管理端聚合）
 - 按时间范围、用户群体（令牌）、课件类型等多维度统计查询
@@ -38,7 +45,7 @@
 - 数据聚合算法与性能优化策略
 - 完整的统计分析示例与前端可视化集成指南
 
-该功能围绕“访问令牌 → 受限课件 → 素材”的访问链路，记录每次浏览会话的起止时间与停留时长，并提供多维度聚合查询。
+该功能围绕"访问令牌 → 受限课件 → 素材"的访问链路，记录每次浏览会话的起止时间与停留时长，并提供多维度聚合查询。
 
 ## 项目结构
 后端采用 FastAPI 分层设计：
@@ -77,7 +84,7 @@ UsageSvc --> Model_CW
 UsageSvc --> Model_Mat
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/api/admin/access_tokens.py:1-120](file://backend/app/api/admin/access_tokens.py#L1-L120)
@@ -87,7 +94,7 @@ UsageSvc --> Model_Mat
 - [backend/app/models/courseware.py:1-74](file://backend/app/models/courseware.py#L1-L74)
 - [backend/app/models/material.py:1-69](file://backend/app/models/material.py#L1-L69)
 
-章节来源
+**章节来源**
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/api/admin/access_tokens.py:1-120](file://backend/app/api/admin/access_tokens.py#L1-L120)
@@ -112,7 +119,7 @@ UsageSvc --> Model_Mat
   - Courseware：OPEN/RESTRICTED 访问模式；与 Material 多对多关联
   - Material：VIDEO/PDF/PPT 等类型元数据
 
-章节来源
+**章节来源**
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/admin/access_tokens.py:1-120](file://backend/app/api/admin/access_tokens.py#L1-L120)
@@ -158,11 +165,11 @@ Svc-->>AdminAPI : 汇总结果
 AdminAPI-->>FE : 200 OK
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
-- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-530](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L530)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-542](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L542)
 
 ## 详细组件分析
 
@@ -196,11 +203,11 @@ OpenAll --> |否| WriteDB["写入 access_session 记录"]
 WriteDB --> ReturnOK["返回 sessionId/startedAt/recorded=true"]
 ```
 
-图表来源
+**图表来源**
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 
-章节来源
+**章节来源**
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 
@@ -264,10 +271,10 @@ AccessSessionPaged --> AccessSessionItem
 MaterialUsagePaged --> MaterialUsageItem
 ```
 
-图表来源
+**图表来源**
 - [backend/app/schemas/access_token_usage.py:1-91](file://backend/app/schemas/access_token_usage.py#L1-L91)
 
-章节来源
+**章节来源**
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/schemas/access_token_usage.py:1-91](file://backend/app/schemas/access_token_usage.py#L1-L91)
 
@@ -284,7 +291,7 @@ MaterialUsagePaged --> MaterialUsageItem
 - Material
   - type：VIDEO/PDF/PPT
 
-章节来源
+**章节来源**
 - [backend/app/models/access_session.py:1-129](file://backend/app/models/access_session.py#L1-L129)
 - [backend/app/models/access_token.py:1-34](file://backend/app/models/access_token.py#L1-L34)
 - [backend/app/models/courseware.py:1-74](file://backend/app/models/courseware.py#L1-L74)
@@ -311,17 +318,17 @@ PublicAPI["api.public.access_sessions"] --> Svc
 FE["pages.admin.AccessTokenUsage"] --> AdminAPI
 ```
 
-图表来源
+**图表来源**
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
-- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-530](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L530)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-542](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L542)
 
-章节来源
+**章节来源**
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
-- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-530](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L530)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-542](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L542)
 
 ## 性能与优化
 - 索引利用
@@ -339,11 +346,11 @@ FE["pages.admin.AccessTokenUsage"] --> AdminAPI
 - 前端缓存与懒加载
   - 概览卡片独立于 tab 状态，首屏即拉取；切换 tab 按需加载台账
 
-章节来源
+**章节来源**
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
-- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-530](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L530)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-542](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L542)
 
 ## 异常检测与告警配置
 - 异常场景
@@ -359,7 +366,7 @@ FE["pages.admin.AccessTokenUsage"] --> AdminAPI
   - 关注 recorded=false 比例（限流或 DB 异常导致）
   - 结合 IP 维度进行短时突发检测（例如同一 IP 短时间大量 start）
 
-章节来源
+**章节来源**
 - [backend/app/services/access_token_usage.py:1-518](file://backend/app/services/access_token_usage.py#L1-L518)
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 
@@ -393,16 +400,20 @@ FE["pages.admin.AccessTokenUsage"] --> AdminAPI
   - 响应：data.usageSummary = { totalDurationSeconds, sessionCount, coursewareCount, materialCount }
 
 ### 前端集成要点
+- **时区一致性改进**：使用 formatLocalYMD 函数确保不同用户时区下的日期格式一致性
 - 默认时间范围：近 7 天；快捷按钮支持近 7 天、近 30 天、本月
 - 首屏概览卡片：优先调用 summary 接口，若无则回退到台账 summary 或素材汇总
 - 素材汇总 Tab：按 totalDurationSeconds 降序展示
 - 访问台账 Tab：分页加载，显示开始/结束时间、停留时长、课件/素材名称、类型、状态（已结束/进行中）
 
-章节来源
+**更新** 新增了本地时区感知的日期格式化机制，解决了之前 ISO 字符串切片导致的时区偏移问题。
+
+**章节来源**
 - [backend/app/api/public/access_sessions.py:1-137](file://backend/app/api/public/access_sessions.py#L1-L137)
 - [backend/app/api/admin/access_token_usage.py:1-101](file://backend/app/api/admin/access_token_usage.py#L1-L101)
 - [backend/app/api/admin/access_tokens.py:1-120](file://backend/app/api/admin/access_tokens.py#L1-L120)
-- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-530](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L530)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:1-542](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L1-L542)
+- [frontend/src/api/index.ts:1-443](file://frontend/src/api/index.ts#L1-443)
 
 ### 可视化集成建议
 - 概览卡片
@@ -427,23 +438,32 @@ FE["pages.admin.AccessTokenUsage"] --> AdminAPI
   - 403 courseware_acl_locked：确认令牌已绑定当前课件
   - recorded=false：可能被限流或写入失败（查看审计日志）
   - 时长不一致：若客户端上报偏差 > 60s，服务端会校正
+  - **日期显示异常**：确认浏览器时区设置，新机制使用本地时区格式化避免 UTC 偏移
 - 验证步骤
   - 使用测试用例复现：参考单元测试与 E2E 用例
   - 检查数据库记录：确认 access_session 是否存在、ended_at/duration_seconds 是否正确
   - 观察审计日志：定位写入失败原因
+  - **时区验证**：在不同时区环境下测试日期筛选功能，确保 YYYY-MM-DD 格式正确
 
-章节来源
+**更新** 增加了时区相关的故障排查指导，帮助解决因时区差异导致的日期筛选问题。
+
+**章节来源**
 - [backend/tests/test_access_session.py:1-640](file://backend/tests/test_access_session.py#L1-L640)
 - [frontend/e2e/admin-access-session.spec.ts:1-215](file://frontend/e2e/admin-access-session.spec.ts#L1-L215)
+- [frontend/src/pages/admin/AccessTokenUsage.tsx:20-40](file://frontend/src/pages/admin/AccessTokenUsage.tsx#L20-L40)
 
 ## 结论
-令牌使用统计体系通过“公共端采集 + 管理端聚合”的方式，实现了高可用、可扩展的访问行为追踪与多维分析。其关键优势包括：
+令牌使用统计体系通过"公共端采集 + 管理端聚合"的方式，实现了高可用、可扩展的访问行为追踪与多维分析。其关键优势包括：
 - 严格的权限控制与健壮的错误处理
 - 跨方言的时间差计算与高效的索引设计
 - 首屏轻量化的概览接口与按素材聚合的核心能力
 - 完善的测试覆盖与前端可视化集成方案
+- **增强的时区一致性**：通过 formatLocalYMD 函数确保全球用户的一致体验
 
 建议在后续迭代中：
 - 增加按日/周/月粒度的趋势聚合接口
 - 引入更丰富的异常检测规则与告警通道
 - 在前端增加更多可视化图表与下钻分析能力
+- **持续优化时区处理**：考虑支持用户自定义时区偏好设置
+
+**更新** 强调了时区一致性改进的重要性，这是提升用户体验的关键特性。

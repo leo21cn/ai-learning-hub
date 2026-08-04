@@ -98,7 +98,7 @@ export const MaterialAPI = {
         fd,
         {
           headers: { "Content-Type": "multipart/form-data" },
-          // 大文件上传(5–10Mbps 家用网络上 200MB 需 150–300s);
+          // 大文件上传(5–10Mbps 家用网络上 500MB 需 400–800s);
           // 单次请求覆盖默认 30s 客户端超时,与后端/nginx 600s 对齐,剩余 5 分钟冗余。
           timeout: 15 * 60 * 1000,
           onUploadProgress: (evt) => {

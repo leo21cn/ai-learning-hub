@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: deploy_infra
-title: ECS Swarm 发布与本地 Docker Desktop 编排
+title: 部署与本地编排（ECS Swarm + Docker Desktop）
 scope:
     - deploy/
     - doc/

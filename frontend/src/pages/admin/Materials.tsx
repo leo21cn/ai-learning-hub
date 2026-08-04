@@ -26,7 +26,7 @@ function friendlyUploadError(e: unknown, fileName: string): string {
     message?: string;
   };
   if (err.code === "MATERIAL_SIZE_EXCEEDED" || err.status === 413) {
-    return `${fileName} 超过 200MB 上限，请压缩或拆分后重试`;
+    return `${fileName} 超过 500MB 上限，请压缩或拆分后重试`;
   }
   if (err.status && err.status >= 500) {
     return `${fileName} 上传失败：服务器异常，请稍后重试`;
@@ -78,10 +78,10 @@ export function MaterialsPage() {
     setUploading(true);
     try {
       for (const f of Array.from(files)) {
-        // 预校验:超过 200MB 直接拒绝,不发起请求,避免 nginx 直接 413
+        // 预校验:超过 500MB 直接拒绝,不发起请求,避免 nginx 直接 413
         if (f.size > MAX_SIZE_BYTES) {
           toast(
-            `${f.name} 超过 200MB 上限，请压缩或拆分后重试`,
+            `${f.name} 超过 500MB 上限，请压缩或拆分后重试`,
             "error",
           );
           continue;
@@ -134,7 +134,7 @@ export function MaterialsPage() {
           {uploading ? "上传中…" : "拖拽文件到此处,或点击选择"}
         </p>
         <p className="text-xs text-slate-400 mt-1">
-          支持 MP4 / PDF / PPT / PPTX / ZIP,单文件 ≤ 200MB
+          支持 MP4 / PDF / PPT / PPTX / ZIP,单文件 ≤ 500MB
         </p>
         <input
           ref={fileRef}
