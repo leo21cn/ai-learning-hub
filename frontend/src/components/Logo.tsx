@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 interface LogoProps {
   /** 图标尺寸（像素），同时按比例决定文字大小 */
   size?: number;
-  /** 是否显示文字 "Learning Hub" */
+  /** 是否显示文字 "AI Learning Hub" */
   showText?: boolean;
   /** 文字颜色类名（Tailwind） */
   textClassName?: string;
@@ -14,7 +14,7 @@ interface LogoProps {
 }
 
 /**
- * Learning Hub 品牌 Logo
+ * AI Learning Hub 品牌 Logo
  *
  * - 蓝色 #2563eb 圆角矩形背景
  * - 顶部 hub 节点网络 + 底部打开的书本（学习）
@@ -47,7 +47,7 @@ export function Logo({
         height={size}
         viewBox="0 0 64 64"
         role="img"
-        aria-label="Learning Hub"
+        aria-label="AI Learning Hub"
       >
         <rect width="64" height="64" rx="14" fill="#2563eb" />
         <g stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
@@ -67,7 +67,7 @@ export function Logo({
           className={`font-bold tracking-tight whitespace-nowrap ${textClassName}`}
           style={{ fontSize: textSize }}
         >
-          Learning Hub
+          AI Learning Hub
         </span>
       )}
     </div>

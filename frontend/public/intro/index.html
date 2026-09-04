@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Learning Hub · 项目介绍</title>
+    <meta
+      name="description"
+      content="Learning Hub —— 以 AI 智能搜索为核心入口的企业学习资料门户，把 AI 深度融入传统课件培训软件。"
+    />
+    <style>
+      :root {
+        --bg: #f7f8fa;
+        --surface: #ffffff;
+        --ink: #101418;
+        --ink-soft: #4a5568;
+        --ink-faint: #8b95a7;
+        --accent: #2563eb;
+        --accent-soft: #eaf1ff;
+        --line: #e6e9ef;
+        --green: #16a34a;
+        --amber: #d97706;
+        --violet: #7c3aed;
+        --radius: 20px;
+        --shadow: 0 1px 2px rgba(16, 20, 24, 0.04), 0 12px 40px rgba(16, 20, 24, 0.06);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        overflow: hidden;
+      }
+
+      /* ---------- Deck ---------- */
+      .deck {
+        position: relative;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: clamp(28px, 6vw, 96px);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(24px);
+        transition: opacity 0.6s ease, transform 0.6s ease, visibility 0.6s;
+        overflow-y: auto;
+      }
+
+      .slide.is-active {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+
+      .slide-inner {
+        width: 100%;
+        max-width: 1080px;
+        margin: auto;
+      }
+
+      /* ---------- Typography ---------- */
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: var(--accent-soft);
+        padding: 7px 14px;
+        border-radius: 999px;
+        margin-bottom: 22px;
+      }
+
+      .eyebrow .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      h1 {
+        font-size: clamp(38px, 6.4vw, 74px);
+        line-height: 1.06;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      h2 {
+        font-size: clamp(28px, 4.2vw, 46px);
+        line-height: 1.12;
+        font-weight: 800;
+        letter-spacing: -0.015em;
+        margin-bottom: 10px;
+      }
+
+      .lead {
+        font-size: clamp(16px, 1.8vw, 21px);
+        line-height: 1.65;
+        color: var(--ink-soft);
+        max-width: 760px;
+      }
+
+      .slide-title {
+        margin-bottom: 34px;
+      }
+
+      .grad {
+        background: linear-gradient(96deg, var(--accent), var(--violet));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      /* ---------- Cards ---------- */
+      .grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .grid.cols-2 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .grid.cols-3 {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 26px 26px 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .card .ico {
+        width: 46px;
+        height: 46px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        margin-bottom: 16px;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .card h3 {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        letter-spacing: -0.01em;
+      }
+
+      .card p {
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .card.accent-green .ico {
+        background: #e7f7ee;
+        color: var(--green);
+      }
+      .card.accent-amber .ico {
+        background: #fbf0df;
+        color: var(--amber);
+      }
+      .card.accent-violet .ico {
+        background: #f0eafe;
+        color: var(--violet);
+      }
+
+      /* ---------- Stat row ---------- */
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: clamp(24px, 5vw, 72px);
+        margin-top: 40px;
+      }
+
+      .stat .n {
+        font-size: clamp(30px, 4.5vw, 48px);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
+      .stat .l {
+        font-size: 14px;
+        color: var(--ink-faint);
+        margin-top: 4px;
+      }
+
+      /* ---------- Compare table ---------- */
+      .compare {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        font-size: 15px;
+      }
+
+      .compare th,
+      .compare td {
+        text-align: left;
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      .compare thead th {
+        font-weight: 700;
+        font-size: 14px;
+        background: #fbfcfe;
+      }
+
+      .compare thead th.old {
+        color: var(--ink-faint);
+      }
+
+      .compare thead th.new {
+        color: var(--accent);
+      }
+
+      .compare tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .compare td.dim {
+        color: var(--ink-soft);
+      }
+
+      .compare td:first-child {
+        font-weight: 600;
+        color: var(--ink);
+        width: 22%;
+      }
+
+      .compare .tick {
+        color: var(--green);
+        font-weight: 700;
+      }
+
+      /* ---------- Architecture layers ---------- */
+      .arch {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .layer {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 18px 22px;
+        box-shadow: var(--shadow);
+      }
+
+      .layer .tag {
+        flex: 0 0 116px;
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--accent);
+      }
+
+      .layer .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .chip {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink-soft);
+        background: #f2f4f8;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 13px;
+        white-space: nowrap;
+      }
+
+      .chip.hl {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-color: #d3e2ff;
+      }
+
+      /* flow arrow */
+      .flowline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 24px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink-soft);
+      }
+
+      .flowline .node {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 9px 14px;
+        box-shadow: var(--shadow);
+      }
+
+      .flowline .arrow {
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      /* ---------- Cover ---------- */
+      .cover-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 9px 18px;
+        box-shadow: var(--shadow);
+        margin-bottom: 28px;
+      }
+
+      .cover-badge .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        background: linear-gradient(135deg, var(--accent), var(--violet));
+      }
+
+      .center {
+        text-align: center;
+      }
+
+      .center .lead {
+        margin: 20px auto 0;
+      }
+
+      .kicker {
+        margin-top: 30px;
+        font-size: 14px;
+        color: var(--ink-faint);
+      }
+
+      /* ---------- Repo slide ---------- */
+      .repo {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: clamp(15px, 2vw, 20px);
+        font-weight: 600;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px 24px;
+        box-shadow: var(--shadow);
+        text-decoration: none;
+        font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+
+      .repo:hover {
+        transform: translateY(-2px);
+        border-color: #c9d6f5;
+      }
+
+      .repo svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .list-check {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 8px;
+      }
+
+      .list-check li {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        font-size: 16px;
+        line-height: 1.55;
+        color: var(--ink-soft);
+      }
+
+      .list-check li b {
+        color: var(--ink);
+      }
+
+      .list-check .ck {
+        flex: 0 0 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 800;
+        margin-top: 1px;
+      }
+
+      /* ---------- Controls / chrome ---------- */
+      .progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--violet));
+        width: 0;
+        z-index: 40;
+        transition: width 0.5s ease;
+      }
+
+      .chrome {
+        position: fixed;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .chrome.brand {
+        top: 22px;
+        left: 26px;
+        font-weight: 800;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+      }
+
+      .chrome.brand .sq {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, var(--accent), var(--violet));
+        display: inline-block;
+        margin-right: 9px;
+        vertical-align: -3px;
+      }
+
+      .chrome.nav {
+        bottom: 24px;
+        right: 26px;
+      }
+
+      .nav button {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 17px;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        box-shadow: var(--shadow);
+        transition: transform 0.15s ease, background 0.15s ease;
+      }
+
+      .nav button:hover {
+        background: var(--accent-soft);
+        transform: translateY(-1px);
+      }
+
+      .nav button:disabled {
+        opacity: 0.4;
+        cursor: default;
+        transform: none;
+      }
+
+      .counter {
+        font-variant-numeric: tabular-nums;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink-faint);
+        min-width: 52px;
+        text-align: center;
+      }
+
+      .dots {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 40;
+        display: flex;
+        gap: 9px;
+      }
+
+      .dots button {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        border: none;
+        background: #cfd6e2;
+        cursor: pointer;
+        padding: 0;
+        transition: width 0.25s ease, background 0.25s ease;
+      }
+
+      .dots button.on {
+        width: 26px;
+        background: var(--accent);
+      }
+
+      .hint {
+        position: fixed;
+        bottom: 26px;
+        left: 26px;
+        z-index: 40;
+        font-size: 12.5px;
+        color: var(--ink-faint);
+      }
+
+      /* ---------- Responsive ---------- */
+      @media (max-width: 820px) {
+        .grid.cols-2,
+        .grid.cols-3 {
+          grid-template-columns: 1fr;
+        }
+        .compare {
+          font-size: 13.5px;
+        }
+        .compare td:first-child {
+          width: 26%;
+        }
+        .layer {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 10px;
+        }
+        .layer .tag {
+          flex-basis: auto;
+        }
+        .hint {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="progress" id="progress"></div>
+
+    <div class="chrome brand"><span class="sq"></span>Learning&nbsp;Hub</div>
+
+    <div class="deck" id="deck">
+      <!-- 0 · Cover -->
+      <section class="slide is-active center">
+        <div class="slide-inner">
+          <span class="cover-badge"><span class="mark"></span>企业学习资料门户 · 项目介绍</span>
+          <h1>让 AI 成为<br /><span class="grad">课件培训的操作系统</span></h1>
+          <p class="lead">
+            Learning Hub 不是一套"把文件放进文件夹"的传统课件管理系统。
+            它以 <b>AI 智能搜索</b> 为核心入口，将大模型能力深度融入检索、浏览、
+            权限与内容处理的全链路，重新定义了企业学习资料的使用方式。
+          </p>
+          <p class="kicker">← / → 方向键或点击圆点切换页面 · 共 6 页</p>
+        </div>
+      </section>
+
+      <!-- 1 · 背景与简介 -->
+      <section class="slide">
+        <div class="slide-inner">
+          <div class="slide-title">
+            <span class="eyebrow"><span class="dot"></span>01 · 背景与简介</span>
+            <h2>资料很多，找到却很难</h2>
+            <p class="lead">
+              企业内部沉淀了大量视频课程、PDF 文档与 PPT 课件，却分散在不同系统、
+              命名各异、格式不一。学习者靠关键词碰运气，管理员靠手工整理——
+              这正是传统课件管理软件止步的地方。
+            </p>
+          </div>
+          <div class="grid cols-3">
+            <div class="card">
+              <div class="ico">🔎</div>
+              <h3>一句话定位</h3>
+              <p>以「AI 智能搜索」为核心入口的企业学习资料门户，前台检索浏览、后台全生命周期运营。</p>
+            </div>
+            <div class="card">
+              <div class="ico">🧩</div>
+              <h3>统一"课件"概念</h3>
+              <p>把视频 / PDF / PPT 零散内容，用 课件—分类—标签—素材 四层结构聚合管理。</p>
+            </div>
+            <div class="card">
+              <div class="ico">⚡</div>
+              <h3>极简入口</h3>
+              <p>前台只保留一个搜索框，把"找学习资料"压缩到一句话的距离，无需登录即可开搜。</p>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="n">3</div><div class="l">主流素材格式 · 视频/PDF/PPT</div></div>
+            <div class="stat"><div class="n">4</div><div class="l">运营层级 · 课件/分类/标签/素材</div></div>
+            <div class="stat"><div class="n">≤2s</div><div class="l">AI 检索目标耗时 (P95)</div></div>
+            <div class="stat"><div class="n">1</div><div class="l">搜索框 · 极简前台入口</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 · 重点待解决问题 -->
+      <section class="slide">
+        <div class="slide-inner">
+          <div class="slide-title">
+            <span class="eyebrow"><span class="dot"></span>02 · 重点待解决问题</span>
+            <h2>传统课件软件绕不过的四道坎</h2>
+            <p class="lead">这些问题不是"再堆几个功能"能解决的，它们需要一种全新的、以理解为驱动的思路。</p>
+          </div>
+          <div class="grid cols-2">
+            <div class="card accent-amber">
+              <div class="ico">🎯</div>
+              <h3>检索命中率低</h3>
+              <p>关键词匹配无法理解模糊诉求，"项目管理相关的课程"常常一无所获，学习者被大量无关结果淹没。</p>
+            </div>
+            <div class="card accent-amber">
+              <div class="ico">🗂️</div>
+              <h3>内容割裂、格式繁杂</h3>
+              <p>视频 / PDF / PPT 各自为政，缺乏统一素材库；PPT 往往必须下载才能看，体验割裂。</p>
+            </div>
+            <div class="card accent-amber">
+              <div class="ico">🔐</div>
+              <h3>权限粗放、难以受控</h3>
+              <p>敏感课件要么全员可见、要么完全隔离，缺乏"可见可搜、按需解锁"的柔性访问控制。</p>
+            </div>
+            <div class="card accent-amber">
+              <div class="ico">🧱</div>
+              <h3>运营靠手工、结构易失控</h3>
+              <p>分类层级混乱、标签重复、素材与课件关系靠人肉维护，规模化后迅速失控。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 · 解决方案（强调 AI） -->
+      <section class="slide">
+        <div class="slide-inner">
+          <div class="slide-title">
+            <span class="eyebrow"><span class="dot"></span>03 · 解决方案</span>
+            <h2>把 AI 装进课件培训的<span class="grad">每一个环节</span></h2>
+            <p class="lead">核心差异：不是给旧软件"加个搜索框"，而是让大模型成为贯穿检索、处理与浏览的能力底座。</p>
+          </div>
+          <div class="grid cols-2">
+            <div class="card">
+              <div class="ico">🤖</div>
+              <h3>AI 搜索 · LLM-to-SQL</h3>
+              <p>自然语言诉求由大模型（qwen-plus）实时翻译成数据库查询（NL2SQL），把模糊语义精准映射到具体课件；无 Key 或超时则自动降级到 ILIKE 关键词兜底。</p>
+            </div>
+            <div class="card">
+              <div class="ico">🛡️</div>
+              <h3>安全可控的 AI 边界</h3>
+              <p>LLM 生成的 SQL 必须通过 <b>7 道白名单校验闸</b>（单语句 / 无注释 / 仅 SELECT / 表白名单 / 强制 LIMIT 等）并在只读事务中执行，让 AI 强大而收敛。</p>
+            </div>
+            <div class="card">
+              <div class="ico">🖥️</div>
+              <h3>AI 驱动的在线浏览 (P-VIEWER)</h3>
+              <p>PPT 上传时由后端自动转换为 PDF，前端用 PDF.js 行内渲染；视频流式播放、PDF 连续阅读，无需下载即可"边搜边看"。</p>
+            </div>
+            <div class="card">
+              <div class="ico">🔑</div>
+              <h3>柔性受控访问 (AccessToken)</h3>
+              <p>受限课件对所有用户"可见可搜"，仅在进入详情时校验访问令牌，SHA-256 + 常量时间比对，支持一键重新生成与即时吊销。</p>
+            </div>
+          </div>
+
+          <div style="margin-top: 34px">
+            <table class="compare">
+              <thead>
+                <tr>
+                  <th>能力维度</th>
+                  <th class="old">传统课件管理软件</th>
+                  <th class="new">Learning Hub · AI 原生</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>找资料</td>
+                  <td class="dim">关键词 / 目录逐层翻找</td>
+                  <td><span class="tick">✓</span> 一句话自然语言 → AI 语义检索</td>
+                </tr>
+                <tr>
+                  <td>看课件</td>
+                  <td class="dim">PPT 需下载本地打开</td>
+                  <td><span class="tick">✓</span> 上传即转 PDF，浏览器内 inline 行预览</td>
+                </tr>
+                <tr>
+                  <td>控权限</td>
+                  <td class="dim">整库隔离或完全公开</td>
+                  <td><span class="tick">✓</span> 课件级令牌，可见可搜 · 按需解锁</td>
+                </tr>
+                <tr>
+                  <td>能力边界</td>
+                  <td class="dim">—</td>
+                  <td><span class="tick">✓</span> AI 生成 SQL 经白名单安全校验，可回退</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 · 技术架构 -->
+      <section class="slide">
+        <div class="slide-inner">
+          <div class="slide-title">
+            <span class="eyebrow"><span class="dot"></span>04 · 技术架构</span>
+            <h2>分层清晰、可容器化交付</h2>
+            <p class="lead">FastAPI + React 前后端分离，PostgreSQL 持久化，Docker 一键编排，AI 能力作为独立服务节点融入。</p>
+          </div>
+
+          <div class="arch">
+            <div class="layer">
+              <div class="tag">接入 / 网关</div>
+              <div class="chips">
+                <span class="chip">浏览器 SPA</span>
+                <span class="chip">Nginx 反向代理 · TLS 终结</span>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">前端</div>
+              <div class="chips">
+                <span class="chip">React 18 + TypeScript</span>
+                <span class="chip">Vite 5</span>
+                <span class="chip">Zustand</span>
+                <span class="chip">React Router 6</span>
+                <span class="chip">Tailwind CSS</span>
+                <span class="chip hl">pdfjs-dist · P-VIEWER</span>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">后端服务</div>
+              <div class="chips">
+                <span class="chip">FastAPI (Python 3.11+)</span>
+                <span class="chip">SQLAlchemy 2.0 + Alembic</span>
+                <span class="chip">Pydantic v2</span>
+                <span class="chip hl">AI 搜索服务 · NL2SQL</span>
+                <span class="chip">AccessTokenService</span>
+                <span class="chip">课件 / 分类 / 标签 / 素材服务</span>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">AI / 依赖</div>
+              <div class="chips">
+                <span class="chip hl">大模型 qwen-plus · dashscope</span>
+                <span class="chip">_sql_safety 白名单校验</span>
+                <span class="chip">LibreOffice headless · PPT→PDF</span>
+                <span class="chip">SlowAPI + Redis 限流</span>
+              </div>
+            </div>
+            <div class="layer">
+              <div class="tag">数据 / 存储</div>
+              <div class="chips">
+                <span class="chip">PostgreSQL 16</span>
+                <span class="chip">本地 PV /app/storage/documents</span>
+                <span class="chip">Redis 7 (可选)</span>
+                <span class="chip">OSS / S3 (演进)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flowline">
+            <span class="node">自然语言</span>
+            <span class="arrow">→</span>
+            <span class="node">LLM 生成 SQL</span>
+            <span class="arrow">→</span>
+            <span class="node">7 道闸白名单校验</span>
+            <span class="arrow">→</span>
+            <span class="node">只读事务执行</span>
+            <span class="arrow">→</span>
+            <span class="node">课件结果 · 在线浏览</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 · GitHub / 结尾 -->
+      <section class="slide">
+        <div class="slide-inner center">
+          <span class="eyebrow"><span class="dot"></span>05 · 开源仓库</span>
+          <h2>在 GitHub 上了解与协作</h2>
+          <p class="lead" style="margin: 14px auto 30px">
+            完整规格、测试用例与部署文档随代码同仓演进。欢迎查阅、试用与共建。
+          </p>
+          <div class="center">
+            <a class="repo" href="https://github.com/leo21cn/ai-learning-hub.git" target="_blank" rel="noopener">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+                />
+              </svg>
+              github.com/leo21cn/ai-learning-hub.git
+            </a>
+          </div>
+          <ul class="list-check" style="max-width: 560px; margin: 36px auto 0; text-align: left">
+            <li><span class="ck">✓</span><span><b>技术栈：</b>FastAPI + SQLAlchemy / React + TypeScript / PostgreSQL / Docker。</span></li>
+            <li><span class="ck">✓</span><span><b>核心亮点：</b>LLM-to-SQL 智能搜索、P-VIEWER 在线浏览、Token 受控访问。</span></li>
+            <li><span class="ck">✓</span><span><b>配套完备：</b>10 章产品规格 + 205 项测试用例 + 部署指南同仓维护。</span></li>
+          </ul>
+          <p class="kicker">Learning Hub · 让 AI 成为课件培训的操作系统</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- Controls -->
+    <div class="dots" id="dots"></div>
+    <div class="chrome nav">
+      <button id="prev" aria-label="上一页">‹</button>
+      <span class="counter" id="counter">1 / 6</span>
+      <button id="next" aria-label="下一页">›</button>
+    </div>
+    <div class="hint">键盘 ← → · 空格翻页</div>
+
+    <script>
+      (function () {
+        var slides = Array.prototype.slice.call(
+          document.querySelectorAll(".slide")
+        );
+        var total = slides.length;
+        var idx = 0;
+        var dotsWrap = document.getElementById("dots");
+        var counter = document.getElementById("counter");
+        var progress = document.getElementById("progress");
+        var prevBtn = document.getElementById("prev");
+        var nextBtn = document.getElementById("next");
+
+        slides.forEach(function (_, i) {
+          var b = document.createElement("button");
+          b.setAttribute("aria-label", "跳到第 " + (i + 1) + " 页");
+          b.addEventListener("click", function () {
+            go(i);
+          });
+          dotsWrap.appendChild(b);
+        });
+        var dots = Array.prototype.slice.call(dotsWrap.children);
+
+        function pad(n) {
+          return (n < 10 ? "0" : "") + n;
+        }
+
+        function render() {
+          slides.forEach(function (s, i) {
+            s.classList.toggle("is-active", i === idx);
+          });
+          dots.forEach(function (d, i) {
+            d.classList.toggle("on", i === idx);
+          });
+          counter.textContent = pad(idx + 1) + " / " + pad(total);
+          progress.style.width = ((idx + 1) / total) * 100 + "%";
+          prevBtn.disabled = idx === 0;
+          nextBtn.disabled = idx === total - 1;
+        }
+
+        function go(i) {
+          idx = Math.max(0, Math.min(total - 1, i));
+          render();
+        }
+
+        function next() {
+          go(idx + 1);
+        }
+        function prev() {
+          go(idx - 1);
+        }
+
+        nextBtn.addEventListener("click", next);
+        prevBtn.addEventListener("click", prev);
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+            e.preventDefault();
+            next();
+          } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+            e.preventDefault();
+            prev();
+          } else if (e.key === "Home") {
+            go(0);
+          } else if (e.key === "End") {
+            go(total - 1);
+          }
+        });
+
+        // 触摸滑动
+        var startX = null;
+        document.addEventListener("touchstart", function (e) {
+          startX = e.touches[0].clientX;
+        });
+        document.addEventListener("touchend", function (e) {
+          if (startX === null) return;
+          var dx = e.changedTouches[0].clientX - startX;
+          if (Math.abs(dx) > 50) dx < 0 ? next() : prev();
+          startX = null;
+        });
+
+        render();
+      })();
+    </script>
+  </body>
+</html>
