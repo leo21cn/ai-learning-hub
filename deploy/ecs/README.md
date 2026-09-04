@@ -147,6 +147,6 @@ docker volume rm lh_storage
 
 ## 10. 关键事实快照(2026-07-08 实地调查)
 
-- `postgres stack` 现状:`postgres_postgres` 服务(postgres:15-alpine)已被 `agent-mcp-container` 复用,DB=`agent_mcp_billing`、User=`agent_mcp`、Pwd=`REMOVED-SECRET-PASSWORD`
+- `postgres stack` 现状:`postgres_postgres` 服务(postgres:15-alpine)已被 `agent-mcp-container` 复用,DB=`agent_mcp_billing`、User=`agent_mcp`、Pwd=`<已隐去，见 ECS 端 deploy/ecs/.env>`
 - `nginx-gateway stack` 现状:`nginx-gateway_nginx`(nginx:1.25-alpine)监听 80 + 443,主配置 `/root/nginx-smartmoves/nginx.conf` 直接 bind mount 到容器内 `/etc/nginx/nginx.conf`(单文件,非 conf.d include 模式)
 - 跨 stack 通信:`docker_default` 是 swarm 默认网络,nginx-gateway / real-time-talk 都在上面;postgres 单独在 `agent-mcp-container_agent-mcp-net`
