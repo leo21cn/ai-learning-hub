@@ -1,0 +1,3 @@
+# Keep shell scripts LF so they can be scp'd to Linux and executed directly,
+# even when the repo is checked out on Windows with core.autocrlf=true.
+*.sh text eol=lf
